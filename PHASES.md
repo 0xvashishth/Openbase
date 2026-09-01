@@ -26,28 +26,24 @@ Overview / Connection page (BYODB test-connection preview against the real API).
 - [x] Implement `DatabaseAdapter` interface (see `ADAPTERS.md` §1)
 - [x] Implement Postgres adapter fully (CRUD, schema introspection, capabilities)
 - [x] Basic table/data browser in dashboard (list collections, view rows) — no visual relationship diagram yet, just raw table view
-- [ ] "Provisioned" mode: creating a project spins up a dedicated Postgres container, connection stored (encrypted) in `connections` table
+- [x] "Provisioned" mode: creating a project spins up a dedicated Postgres container, connection stored (encrypted) in `connections` table
 
-**Status (in progress):** Adapter interface + Postgres adapter (CRUD, schema, PK/FK introspection,
-native triggers via LISTEN/NOTIFY, realtime subscribe, capability flags) are done and tested against a
-real Postgres in Docker. A **BYODB path for Phase 1 is already working end-to-end**: save-connection
-(test-before-save, auto-detect engine, envelope-encrypt credentials → SCHEMA.md §2), plus `GET
-/collections`, `GET /collections/{name}` (schema) and `POST /query` (rows + filters) endpoints all route
-through the adapter (`internal/engine`, `internal/secrets`, `internal/server/data_handlers.go`). The
-dashboard's **Tables** tab browses a connected database's tables and rows. What remains is **provisioned
-mode** (spinning up the dedicated container) — see the next points below.
+**Status (complete ✅):** Adapter interface + Postgres adapter (CRUD, schema, PK/FK introspection,
+native triggers via LISTEN/NOTIFY, realtime subscribe, capability flags) tested against a real Postgres
+in Docker. Both connection paths work end-to-end from the dashboard:
+- **BYODB**: save-connection (test-before-save, auto-detect engine, envelope-encrypt credentials →
+  SCHEMA.md §2), `GET /collections`, `GET /collections/{name}` (schema) and `POST /query` (rows +
+  filters) all route through the adapter.
+- **Provisioned**: `internal/provision` (ARCHITECTURE.md §2.7) runs a Docker-backed `Compose`
+  provisioner; saving a `mode: provisioned` connection spawns a dedicated Postgres container, stores
+  its generated credentials encrypted with a `container_id`, and marks it `connected`. `DELETE /v1/
+  projects/{id}/connections` tears the container down (verified in an E2E test: provisioning →
+  browse → delete → container gone). Overwriting a provisioned connection destroys the old container
+  so nothing leaks. Provisioning is opt-in via `OPENBASE_PROVISIONER_ENABLED=true`.
+- Dashboard: **Connection** tab lets you create a new provisioned DB or attach an existing one, and
+  shows the current connection with a Remove action; **Tables** tab browses it.
 
-**Remaining work (next, one at a time):**
-1. Add `ProvisionerInterface` (ARCHITECTURE.md §2.7) behind Docker; project creation in `provisioned`
-   mode calls it to launch a dedicated Postgres container, stores its connection (encrypted, like BYODB)
-   and marks it `connected`.
-2. Wire the "Database type" picker (provisioned / BYODB) into the dashboard project-creation flow
-   (`CreateProjectForm`) and the `POST /projects` + `POST /projects/{id}/connections` handlers.
-3. Add a `GET /projects/{id}/connections` status-refresh + `DELETE` (disconnect) endpoint so a misconfigured
-   BYODB string can be replaced without a fresh project.
-4. (Test) Provisioning tests boot a real container via Docker and assert the table browser works over it.
-
-**Done when:** a user creates a project, gets a provisioned Postgres instance, and can view/query its tables through the dashboard.
+**Done when:** a user creates a project, gets a provisioned Postgres instance, and can view/query its tables through the dashboard. — *met, verified in `internal/server/provision_test.go` and a Docker-backed E2E smoke.*
 
 ## Phase 2 — Second Adapter (FerretDB) — Prove the Abstraction Actually Generalizes
 **Goal:** This is the real test of whether the adapter pattern was designed correctly. If adding FerretDB requires touching feature code outside the adapter itself, the interface needs rework before adding more engines.
@@ -89,13 +85,17 @@ mode** (spinning up the dedicated container) — see the next points below.
 
 **Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter.
 
-## Phase 6 — BYODB Mode
+## Phase 6 — BYODB Mode (mostly pulled forward into Phase 1)
 **Goal:** Users can connect an existing database instead of provisioning one.
 
-- [ ] Connection string input + auto-detection (`SCHEMA.md` §3)
-- [ ] Test-connection-before-save flow
-- [ ] Encrypted credential storage wired to real vault/KMS (not the earlier basic encryption)
-- [ ] All existing features (browser, schema explorer, triggers, realtime) work identically over a BYODB connection, gated by the same capability flags
+> Note: the core BYODB flow was deliberately pulled forward into Phase 1 (documented deviation) to make the
+> Phase 1 dashboard table-browser testable. The remaining work below is incremental hardening.
+
+- [x] Connection string input + auto-detection (`SCHEMA.md` §3) — delivered in Phase 1
+- [x] Test-connection-before-save flow (ADAPTERS.md §5) — delivered in Phase 1
+- [x] Encrypted credential storage (envelope-encrypted at rest, SCHEMA.md §2) — delivered in Phase 1
+- [ ] Upgrade the envelope-encryption master key to a real vault/KMS/signer (currently an env-configured master key; design in `ARCHITECTURE.md` §2.4)
+- [ ] All existing features (browser, schema explorer, triggers, realtime) work identically over a BYODB connection, gated by the same capability flags — automatically satisfied by the adapter gate, but re-verify after Phase 3/4/5 features land
 
 **Done when:** a user pastes a connection string to their own existing Postgres or FerretDB instance and gets the full platform experience without provisioning anything.
 

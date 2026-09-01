@@ -31,6 +31,11 @@ type Config struct {
 	// AllowedOrigins for CORS, comma-separated. Empty means allow any origin
 	// (development default).
 	AllowedOrigins []string
+
+	// ProvisioningEnabled toggles "provisioned" database creation. Off by
+	// default so the API boots without Docker; enable with
+	// OPENBASE_PROVISIONER_ENABLED=true when Docker is available.
+	ProvisioningEnabled bool
 }
 
 // Default returns configuration populated from the environment.
@@ -45,6 +50,7 @@ func Default() (*Config, error) {
 		TokenTTL:        24 * time.Hour,
 		EncryptionKey:   envOr("OPENBASE_ENCRYPTION_KEY", ""),
 		AllowedOrigins:  splitCSV(os.Getenv("OPENBASE_ALLOWED_ORIGINS")),
+		ProvisioningEnabled: os.Getenv("OPENBASE_PROVISIONER_ENABLED") == "true",
 	}
 
 	if c.JWTSecret == "dev-only-secret-change-me" && os.Getenv("ENV") == "production" {

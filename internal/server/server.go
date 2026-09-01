@@ -33,7 +33,31 @@ type Services struct {
 	// AllowedOrigins for CORS. Empty means allow any origin (dev default).
 	// The dashboard origin should be listed in production.
 	AllowedOrigins []string
+
+	// Provisioner creates and destroys dedicated per-project database
+	// instances (ARCHITECTURE.md §2.7). If nil, "provisioned" project creation
+	// returns 501.
+	Provisioner Provisioner
 }
+
+// Provisioner creates and destroys dedicated per-project database instances.
+type Provisioner interface {
+	// Provision starts a dedicated instance for engine and returns its
+	// connection details (with embedded generated credentials).
+	Provision(ctx context.Context, engine Engine) (ProvisionedInstance, error)
+	// Destroy removes a previously provisioned instance.
+	Destroy(ctx context.Context, containerID string) error
+}
+
+// ProvisionedInstance is the result of provisioning a dedicated database.
+type ProvisionedInstance struct {
+	ContainerID string
+	Engine      Engine
+	ConnString  string
+}
+
+// Engine identifies a database engine.
+type Engine string
 
 // SecretsProvider decrypts a stored connection's credentials for runtime use.
 type SecretsProvider interface {
@@ -88,6 +112,7 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.getConnection)))
 	mux.Handle("POST /v1/projects/{projectID}/connections/test", s.requireAuth(http.HandlerFunc(s.testConnection)))
 	mux.Handle("POST /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.saveConnection)))
+	mux.Handle("DELETE /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.deleteConnection)))
 
 	mux.Handle("GET /v1/projects/{projectID}/collections", s.requireAuth(http.HandlerFunc(s.listCollections)))
 	mux.Handle("GET /v1/projects/{projectID}/collections/{collection}", s.requireAuth(http.HandlerFunc(s.getSchema)))

@@ -49,6 +49,7 @@ export interface Connection {
 export interface TestConnectionResult {
   success: boolean;
   engine?: string;
+  mode?: string;
   message?: string;
 }
 

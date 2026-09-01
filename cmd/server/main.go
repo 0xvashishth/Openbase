@@ -18,6 +18,7 @@ import (
 	"github.com/openbase/openbase/internal/config"
 	"github.com/openbase/openbase/internal/engine"
 	"github.com/openbase/openbase/internal/metadata"
+	"github.com/openbase/openbase/internal/provision"
 	"github.com/openbase/openbase/internal/secrets"
 	"github.com/openbase/openbase/internal/server"
 	"github.com/openbase/openbase/migrations"
@@ -79,6 +80,16 @@ func run(log *slog.Logger) error {
 		AdapterFactory: engine.NewFactory(),
 		Secrets:        secretsProv,
 		AllowedOrigins: cfg.AllowedOrigins,
+	}
+
+	// Provisioning (ARCHITECTURE.md §2.7): a Compose-backed provisioner that
+	// creates dedicated per-project Postgres containers. Off unless Docker is
+	// explicitly enabled.
+	if cfg.ProvisioningEnabled {
+		svc.Provisioner = &provision.ServerProvisioner{Inner: &provision.Compose{}}
+		log.Info("provisioning enabled (docker-based)")
+	} else {
+		log.Warn("OPENBASE_PROVISIONER_ENABLED not set; 'provisioned' connections are disabled")
 	}
 
 	handler := server.New(svc)

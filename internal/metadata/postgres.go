@@ -329,6 +329,13 @@ func (s *Postgres) UpdateConnectionStatus(ctx context.Context, id string, status
 	return nil
 }
 
+// DeleteConnection removes a connection row by id. Missing rows are treated as
+// success so the endpoint is idempotent.
+func (s *Postgres) DeleteConnection(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM connections WHERE id = $1`, id)
+	return mapError(err)
+}
+
 // ---- API keys ----
 
 func (s *Postgres) CreateAPIKey(ctx context.Context, k *APIKey) error {

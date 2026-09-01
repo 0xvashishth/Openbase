@@ -62,5 +62,6 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 7. **Phase 6** — Remaining adapters (Valkey, graph, vector) + polish
 
 > **Status:** Phase 0 is **complete** (API + metadata store + auth + encryption + Next.js dashboard).
-> Phase 1 is **in progress**: the Postgres adapter and a working BYODB table-browser path are done;
-> provisioned mode is the remaining Phase 1 item. See `PHASES.md` for the live checklist and next points.
+> Phase 1 is **complete**: Postgres adapter, provisioned-mode DB creation (Docker-backed), a working
+> BYODB path, and a dashboard table browser. Both connection modes are verified end-to-end. Next up is
+> Phase 2 (FerretDB adapter to prove the abstraction generalizes). See `PHASES.md` for the live checklist.

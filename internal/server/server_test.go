@@ -31,6 +31,13 @@ type testServer struct {
 
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
+	return newTestServerWith(t, nil)
+}
+
+// newTestServerWith builds a server injecting an optional Provisioner (used by
+// provisioning tests) while keeping the standard real-DB harness.
+func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
+	t.Helper()
 	pg := testutil.StartPostgres(t)
 	ctx := context.Background()
 
@@ -55,6 +62,7 @@ func newTestServer(t *testing.T) *testServer {
 		Log:            logger,
 		AdapterFactory: engine.NewFactory(),
 		Secrets:        secretsProv,
+		Provisioner:    prov,
 	}
 
 	ts := httptest.NewServer(server.New(svc))

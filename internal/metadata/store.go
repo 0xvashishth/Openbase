@@ -134,6 +134,7 @@ type Store interface {
 	GetConnectionByProject(ctx context.Context, projectID string) (*Connection, error)
 	UpdateConnection(ctx context.Context, c *Connection) error
 	UpdateConnectionStatus(ctx context.Context, id string, status ConnectionStatus) error
+	DeleteConnection(ctx context.Context, id string) error
 
 	// API keys.
 	CreateAPIKey(ctx context.Context, k *APIKey) error

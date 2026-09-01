@@ -57,9 +57,10 @@ type testConnectionRequest struct {
 }
 
 type testConnectionResponse struct {
-	Success bool                `json:"success"`
-	Engine  string              `json:"engine,omitempty"`
-	Message string              `json:"message,omitempty"`
+	Success bool   `json:"success"`
+	Engine  string `json:"engine,omitempty"`
+	Mode    string `json:"mode,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func (s *Server) testConnection(w http.ResponseWriter, r *http.Request) {

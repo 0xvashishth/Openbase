@@ -40,11 +40,17 @@ func (s *Server) connectProject(ctx context.Context, projectID string) (Adapter,
 type saveConnectionRequest struct {
 	ConnectionString string `json:"connection_string"`
 	Engine           string `json:"engine,omitempty"` // optional explicit override
+	Mode             string `json:"mode,omitempty"`   // "byodb" (default) | "provisioned"
 }
 
-// saveConnection tests the string, detects the engine, encrypts credentials and
-// stores the connection. Follows ADAPTERS.md §5 (test before save) and
-// SCHEMA.md §2 (encrypt at rest). Idempotent: a second save overwrites.
+// saveConnection attaches a database to a project. Two modes (SCHEMA.md §3):
+//   - "byodb" (default): user-supplied connection string is detected, tested,
+//     encrypted and stored (ADAPTERS.md §5, SCHEMA.md §2).
+//   - "provisioned": the platform provisions a dedicated instance, generating
+//     credentials that are encrypted and stored identically.
+//
+// Idempotent: a second save overwrites the previous connection (and, for a
+// provisioned replacement, destroys the old instance).
 func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
@@ -61,49 +67,87 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if strings.TrimSpace(req.ConnectionString) == "" {
-		writeError(w, http.StatusBadRequest, "connection_string is required")
+
+	mode := metadata.ConnectionMode(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		mode = metadata.ModeBYODB
+	}
+	if mode != metadata.ModeBYODB && mode != metadata.ModeProvisioned {
+		writeError(w, http.StatusBadRequest, "mode must be \"byodb\" or \"provisioned\"")
 		return
 	}
 
-	// Detect engine (allow an explicit override for ambiguous strings).
-	engine, err := adapter.DetectEngine(req.ConnectionString)
-	if err != nil {
-		if req.Engine != "" {
-			engine = adapter.Engine(req.Engine)
-		} else {
-			writeError(w, http.StatusBadRequest, "could not detect engine; specify engine explicitly")
+	var (
+		engine adapter.Engine
+		secret metadata.ConnectionSecret
+		inst   ProvisionedInstance
+	)
+
+	if mode == metadata.ModeBYODB {
+		if strings.TrimSpace(req.ConnectionString) == "" {
+			writeError(w, http.StatusBadRequest, "connection_string is required")
 			return
 		}
-	}
-
-	// Test before saving (ADAPTERS.md §5) with the adapter's real error surfaced.
-	if _, err := s.svc.AdapterFactory.TestConnection(r.Context(), req.ConnectionString); err != nil {
-		writeJSON(w, http.StatusOK, testConnectionResponse{Success: false, Engine: string(engine), Message: err.Error()})
-		return
-	}
-
-	secret := metadata.ConnectionSecret{
-		ConnString: req.ConnectionString,
-		Username:   "", // connection string carries embedded creds in v1
-		Password:   "",
+		// Detect engine (allow an explicit override for ambiguous strings).
+		var err error
+		engine, err = adapter.DetectEngine(req.ConnectionString)
+		if err != nil {
+			if req.Engine != "" {
+				engine = adapter.Engine(req.Engine)
+			} else {
+				writeError(w, http.StatusBadRequest, "could not detect engine; specify engine explicitly")
+				return
+			}
+		}
+		// Test before saving (ADAPTERS.md §5) with the adapter's real error surfaced.
+		if _, err := s.svc.AdapterFactory.TestConnection(r.Context(), req.ConnectionString); err != nil {
+			writeJSON(w, http.StatusOK, testConnectionResponse{Success: false, Engine: string(engine), Message: err.Error()})
+			return
+		}
+		secret = metadata.ConnectionSecret{ConnString: req.ConnectionString}
+	} else {
+		if s.svc.Provisioner == nil {
+			writeError(w, http.StatusNotImplemented, "provisioning is not configured")
+			return
+		}
+		// For now one engine; a picker arrives with Phase 2.
+		engine = adapter.EnginePostgres
+		if req.Engine != "" {
+			engine = adapter.Engine(req.Engine)
+		}
+		var err error
+		inst, err = s.svc.Provisioner.Provision(r.Context(), Engine(engine))
+		if err != nil {
+			s.svc.Log.Error("provisioning failed", "err", err)
+			writeError(w, http.StatusBadGateway, "failed to provision database: "+err.Error())
+			return
+		}
+		secret = metadata.ConnectionSecret{ConnString: inst.ConnString}
 	}
 
 	conn := &metadata.Connection{
 		ProjectID: projectID,
-		Mode:      metadata.ModeBYODB,
+		Mode:      mode,
 		Engine:    string(engine),
 		Status:    metadata.StatusPending,
+	}
+	if inst.ContainerID != "" {
+		conn.ContainerID = &inst.ContainerID
 	}
 	if err := s.svc.Secrets.EncryptConnection(conn, secret); err != nil {
 		s.writeErr(w, err)
 		return
 	}
 
-	// Upsert: replace any existing connection for this project.
+	// If we are overwriting an existing provisioned connection, destroy the old
+	// instance so we do not leak containers.
 	existing, err := s.svc.Store.GetConnectionByProject(r.Context(), projectID)
 	switch {
 	case err == nil:
+		if existing.Mode == metadata.ModeProvisioned && existing.ContainerID != nil &&
+			(*existing.ContainerID != inst.ContainerID) && s.svc.Provisioner != nil {
+			_ = s.svc.Provisioner.Destroy(r.Context(), *existing.ContainerID)
+		}
 		conn.ID = existing.ID
 		conn.CreatedAt = existing.CreatedAt
 		if err := s.svc.Store.UpdateConnection(r.Context(), conn); err != nil {
@@ -130,7 +174,45 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 	conn.EncryptedConnString = nil
 	conn.EncryptedUsername = nil
 	conn.EncryptedPassword = nil
-	writeJSON(w, http.StatusOK, testConnectionResponse{Success: true, Engine: string(engine)})
+	writeJSON(w, http.StatusOK, testConnectionResponse{Success: true, Engine: string(engine), Mode: string(mode)})
+}
+
+// ---- Disconnect / destroy ----
+
+// deleteConnection detaches the database from a project. For a provisioned
+// instance it also destroys the container; for BYODB it just clears the stored
+// (encrypted) config. Idempotent when nothing is connected.
+func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	existing, err := s.svc.Store.GetConnectionByProject(r.Context(), projectID)
+	if errors.Is(err, metadata.ErrNotFound) {
+		writeJSON(w, http.StatusOK, map[string]bool{"removed": false})
+		return
+	}
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	// Destroy any provisioned instance backing this connection.
+	if existing.Mode == metadata.ModeProvisioned && existing.ContainerID != nil && s.svc.Provisioner != nil {
+		if err := s.svc.Provisioner.Destroy(r.Context(), *existing.ContainerID); err != nil {
+			s.svc.Log.Error("failed to destroy provisioned instance", "container_id", *existing.ContainerID, "err", err)
+			writeError(w, http.StatusInternalServerError, "failed to destroy provisioned instance")
+			return
+		}
+	}
+
+	if err := s.svc.Store.DeleteConnection(r.Context(), existing.ID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
 
 // ---- Schema / rows browsing ----

@@ -51,6 +51,7 @@ All config is env-driven (`internal/config`). The most important:
 | `OPENBASE_JWT_SECRET` | JWT signing secret | dev default (reject in production) |
 | `OPENBASE_ENCRYPTION_KEY` | Envelope-encryption master key for connection secrets | empty ⇒ secrets disabled |
 | `OPENBASE_ALLOWED_ORIGINS` | CORS allow-list (comma-separated); empty = any origin | empty |
+| `OPENBASE_PROVISIONER_ENABLED` | Enable "provisioned" DB mode (needs a Docker daemon) | `false` |
 | `NEXT_PUBLIC_OPENBASE_API_URL` | Dashboard → API base URL (browser) | `http://localhost:8080` |
 
 ## Tests
@@ -59,8 +60,17 @@ All Go tests hit a **real Postgres in Docker** (`internal/testutil` spins one up
 skips gracefully when Docker is unavailable). No mocks for the DB layer (ADAPTERS.md §4).
 
 ```bash
-go test ./...     # full suite
+go test ./...     # full suite (provisioning tests need the Docker daemon and skip if absent)
 make test-short   # -short variant
 ```
 
 Dashboard: `cd dashboard && npm run build`.
+
+### Provisioned databases from docker compose
+
+`docker compose up` leaves provisioned mode off (the API container has no Docker
+CLI/socket). To enable it in the compose stack you'd mount the host Docker socket
+into the `api` service, add the Docker CLI to its image, and set
+`OPENBASE_PROVISIONER_ENABLED=true`. See `docker-compose.yml`. For plain local
+development, run the API on the host with the env var set and Docker any reachable
+daemon.

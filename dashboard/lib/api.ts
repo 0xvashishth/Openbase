@@ -110,10 +110,18 @@ export const api = {
     request<TestConnectionResult>("POST", `/v1/projects/${projectId}/connections/test`, {
       connection_string: connectionString,
     }, token),
-  saveConnection: (token: string, projectId: string, connectionString: string) =>
+  saveConnection: (
+    token: string,
+    projectId: string,
+    connectionString: string,
+    mode?: "byodb" | "provisioned"
+  ) =>
     request<TestConnectionResult>("POST", `/v1/projects/${projectId}/connections`, {
       connection_string: connectionString,
+      mode,
     }, token),
+  deleteConnection: (token: string, projectId: string) =>
+    request<{ removed: boolean }>("DELETE", `/v1/projects/${projectId}/connections`, undefined, token),
 
   // Adapter-backed data browsing.
   listCollections: (token: string, projectId: string) =>
