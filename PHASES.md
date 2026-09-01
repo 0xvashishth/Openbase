@@ -48,12 +48,26 @@ in Docker. Both connection paths work end-to-end from the dashboard:
 ## Phase 2 — Second Adapter (FerretDB) — Prove the Abstraction Actually Generalizes
 **Goal:** This is the real test of whether the adapter pattern was designed correctly. If adding FerretDB requires touching feature code outside the adapter itself, the interface needs rework before adding more engines.
 
-- [ ] Implement FerretDB adapter against the same `DatabaseAdapter` interface
-- [ ] Fill in its `Capabilities()` honestly (see matrix in `ADAPTERS.md` §2)
-- [ ] Dashboard's table browser must work unmodified against both adapters
-- [ ] Database picker in project creation flow (dropdown: Postgres / FerretDB for now)
+- [x] Implement FerretDB adapter against the same `DatabaseAdapter` interface
+- [x] Fill in its `Capabilities()` honestly (see matrix in `ADAPTERS.md` §2)
+- [x] Dashboard's table browser must work unmodified against both adapters
+- [x] Database picker (dropdown: Postgres / FerretDB) in the connection flow
 
-**Done when:** the exact same dashboard code browses both a Postgres-backed and a FerretDB-backed project, with document-model differences handled gracefully (no crashing on missing foreign key info, etc.)
+**Status (complete ✅):** A full FerretDB adapter (`internal/adapter/ferretdb`) speaks the Mongo wire
+protocol via `go.mongodb.org/mongo-driver/v2` to `ghcr.io/ferretdb/ferretdb:2.7.0` (backed by the
+DocumentDB-enabled Postgres image). It implements CRUD, schema introspection (field-union sampling +
+`_id` primary, index listing), filtered/sorted/paginated query, and BSON→JSON-friendly normalization;
+unsupported methods (triggers, change streams, relationships) return the platform's explicit
+`ErrUnsupported` and `Capabilities()` declares `Realtime:none` for now (polling emulation ships with
+Phase 4/5, per ADAPTERS.md §2 matrix). Provisioning also handles FerretDB: `internal/provision`
+spins a whole group (private network + DocumentDB backend + FerretDB container) and `Destroy` tears
+it down — the stored `container_id` carries a `ferret|` prefix to signal a group. Verified by:
+adapter tests against a real FerretDB (CRUD/introspection/capabilities), a provision-package
+round-trip teardown test, and a server-level E2E (provision FerretDB via API → browse endpoints →
+DELETE → connection gone). Dashboard Connection panel gained an engine picker and the table browser
+runs against both engines unchanged. Full Go suite + dashboard build green.
+
+**Done when:** the exact same dashboard code browses both a Postgres-backed and a FerretDB-backed project, with document-model differences handled gracefully (no crashing on missing foreign key info, etc.) — *met.*
 
 ## Phase 3 — Visual Schema Explorer + Auto-Generated API
 **Goal:** The Supabase-style "see your tables and how they relate" feature, plus a REST API generated from the schema.

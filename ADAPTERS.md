@@ -61,10 +61,14 @@ The dashboard and API layer **query this before rendering a feature**. Example: 
 |---|---|---|---|---|---|---|
 | PostgreSQL | Yes | Yes | Yes | Native (logical replication) | Yes | Yes (pgvector) |
 | MySQL | Yes | Yes | Yes | Polling / binlog-based | Yes | No |
-| FerretDB (on Postgres) | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
+| FerretDB (on Postgres) ¹ | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
 | Valkey | No | No | No | Native (pub/sub) | Limited | No |
 | ArcadeDB (graph) | N/A (graph traversal instead) | N/A | Limited | Polling | Yes | Yes |
 | Qdrant / Chroma (vector) | No | No | No | No | No | Yes (native) |
+
+¹ The shipped FerretDB adapter currently returns `Realtime:none` in `Capabilities()`; the polling-based
+emulation tier (ADAPTERS.md §3, tier 2) arrives with the triggers/realtime phases, at which point the
+flag flips to `polling` and this row becomes accurate in code, not just intent.
 
 This table should live in code as the actual `Capabilities()` return values, not just documentation — keep them in sync.
 

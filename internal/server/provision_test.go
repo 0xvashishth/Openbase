@@ -101,6 +101,57 @@ func TestProvisioningDisabled(t *testing.T) {
 	}
 }
 
+// TestProvisionedFerretDBEndToEnd proves the same table-browser endpoints work
+// unmodified against a provisioned FerretDB instance, and that DELETE tears the
+// backend group down.
+func TestProvisionedFerretDBEndToEnd(t *testing.T) {
+	if !dockerAvailable() {
+		t.Skip("docker not available; skipping provisioning integration test")
+	}
+
+	prov := &provision.Compose{}
+	sp := &provision.ServerProvisioner{Inner: prov}
+	ts := newTestServerWith(t, sp)
+
+	tok, _, pID := ts.newProject(t)
+
+	resp, js := ts.do(t, "POST", "/v1/projects/"+pID+"/connections", tok,
+		map[string]any{"mode": "provisioned", "engine": "ferretdb"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("provision ferretdb status = %d body=%v", resp.StatusCode, js)
+	}
+
+	rc, conn := ts.do(t, "GET", "/v1/projects/"+pID+"/connections", tok, nil)
+	if rc.StatusCode != http.StatusOK {
+		t.Fatalf("get connection status = %d", rc.StatusCode)
+	}
+	if conn["engine"] != "ferretdb" || conn["mode"] != "provisioned" || conn["status"] != "connected" {
+		t.Fatalf("unexpected connection record: %v", conn)
+	}
+	containerID, _ := conn["container_id"].(string)
+	if containerID == "" {
+		t.Fatalf("expected container_id")
+	}
+	t.Cleanup(func() { _ = prov.Destroy(context.Background(), containerID) })
+
+	// Data endpoints must work unchanged against the document model (a fresh
+	// FerretDB db has no collections, so 200 with an empty body is expected).
+	world, _ := ts.do(t, "GET", "/v1/projects/"+pID+"/collections", tok, nil)
+	if world.StatusCode != http.StatusOK {
+		t.Fatalf("collections over ferretdb status = %d", world.StatusCode)
+	}
+
+	// Delete tears down the connection.
+	dc, _ := ts.do(t, "DELETE", "/v1/projects/"+pID+"/connections", tok, nil)
+	if dc.StatusCode != http.StatusOK {
+		t.Fatalf("delete connection status = %d", dc.StatusCode)
+	}
+	gc, _ := ts.do(t, "GET", "/v1/projects/"+pID+"/connections", tok, nil)
+	if gc.StatusCode != http.StatusNotFound {
+		t.Fatalf("connection still present after delete: %d", gc.StatusCode)
+	}
+}
+
 // TestProvisionedOverwritesDestroyOld covers the leak-prevention path: saving a
 // provisioned connection twice must destroy the first container.
 func TestProvisionedOverwritesDestroyOld(t *testing.T) {

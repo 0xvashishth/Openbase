@@ -114,11 +114,13 @@ export const api = {
     token: string,
     projectId: string,
     connectionString: string,
-    mode?: "byodb" | "provisioned"
+    mode?: "byodb" | "provisioned",
+    engine?: string
   ) =>
     request<TestConnectionResult>("POST", `/v1/projects/${projectId}/connections`, {
       connection_string: connectionString,
       mode,
+      engine,
     }, token),
   deleteConnection: (token: string, projectId: string) =>
     request<{ removed: boolean }>("DELETE", `/v1/projects/${projectId}/connections`, undefined, token),

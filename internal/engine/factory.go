@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/openbase/openbase/internal/adapter"
+	"github.com/openbase/openbase/internal/adapter/ferretdb"
 	"github.com/openbase/openbase/internal/adapter/postgres"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/server"
@@ -60,6 +61,8 @@ func (f *Factory) ConnectForEngine(ctx context.Context, engine adapter.Engine, c
 	switch engine {
 	case adapter.EnginePostgres:
 		a = postgres.New()
+	case adapter.EngineFerretDB:
+		a = ferretdb.New()
 	default:
 		return nil, fmt.Errorf("%w: engine %q not yet implemented", adapter.ErrUnsupported, engine)
 	}

@@ -3,6 +3,8 @@ package provision
 import (
 	"context"
 	"errors"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/openbase/openbase/internal/server"
@@ -55,5 +57,57 @@ func TestServerProvisionerErrPropagates(t *testing.T) {
 	_, err := sp.Provision(context.Background(), server.Engine(EnginePostgres))
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// containerExists reports whether a Docker container with the given name exists.
+func containerExists(name string) (bool, error) {
+	_, err := exec.Command("docker", "inspect", name).Output()
+	return err == nil, nil
+}
+
+func dockerAvailable() bool {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return false
+	}
+	return exec.Command("docker", "info").Run() == nil
+}
+
+// TestComposeFerretDBGroupRoundTrip provisions a real FerretDB group and
+// verifies Destroy removes every piece: the FerretDB container, the DocumentDB
+// backend, and the private network.
+func TestComposeFerretDBGroupRoundTrip(t *testing.T) {
+	if !dockerAvailable() {
+		t.Skip("docker not available; skipping ferretdb provisioning test")
+	}
+
+	c := &Compose{}
+	ctx := context.Background()
+	inst, err := c.Provision(ctx, EngineFerretDB)
+	if err != nil {
+		t.Fatalf("provision ferretdb: %v", err)
+	}
+	base := strings.TrimPrefix(inst.ContainerID, ferretPrefix)
+	if base == inst.ContainerID {
+		t.Fatalf("expected ferret-prefixed container id, got %q", inst.ContainerID)
+	}
+
+	for _, n := range []string{base + "-ferret", base + "-pg"} {
+		exists, _ := containerExists(n)
+		if !exists {
+			t.Fatalf("expected container %s to exist after provisioning", n)
+		}
+	}
+
+	if err := c.Destroy(ctx, inst.ContainerID); err != nil {
+		t.Fatalf("destroy ferretdb group: %v", err)
+	}
+	for _, n := range []string{base + "-ferret", base + "-pg"} {
+		if exists, _ := containerExists(n); exists {
+			t.Fatalf("container %s should be gone after destroy", n)
+		}
+	}
+	if exists, _ := containerExists(base + "-net"); exists {
+		t.Fatalf("network %s should be gone after destroy", base+"-net")
 	}
 }
