@@ -1,0 +1,26 @@
+# Binaries / build output
+/bin/
+*.exe
+*.test
+*.out
+
+# Local env
+.env
+.env.local
+
+# Go
+go.work
+go.work.sum
+vendor/
+
+# Dashboard (Next.js)
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.env.local
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp

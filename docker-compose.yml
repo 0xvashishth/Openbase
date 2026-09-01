@@ -1,0 +1,53 @@
+# Openbase development stack (PHASES.md Phase 0 deliverable).
+# Boots: metadata Postgres + platform API + web dashboard.
+# `make dev` or `docker compose up --build`.
+
+services:
+  metadata-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openbase
+      POSTGRES_PASSWORD: openbase
+      POSTGRES_DB: openbase
+    ports:
+      - "5432:5432"
+    volumes:
+      - metadata-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbase -d openbase"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      OPENBASE_ADDR: ":8080"
+      OPENBASE_DATABASE_URL: "postgres://openbase:openbase@metadata-db:5432/openbase?sslmode=disable"
+      # Demo secret only. Set a strong value in real deployments.
+      OPENBASE_JWT_SECRET: "dev-only-secret-change-me"
+      # Envelope-encryption key for BYODB / provisioned connection secrets.
+      OPENBASE_ENCRYPTION_KEY: "dev-only-encryption-key-change-me"
+      # Dashboard origin (dev). Empty allows any origin.
+      OPENBASE_ALLOWED_ORIGINS: "http://localhost:3000"
+    ports:
+      - "8080:8080"
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_OPENBASE_API_URL: "http://localhost:8080"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  metadata-db-data:
