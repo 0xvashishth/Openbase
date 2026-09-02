@@ -10,6 +10,7 @@ import { SchemaExplorer } from "@/components/schema/SchemaExplorer";
 import { APIKeysPanel } from "@/components/projects/APIKeysPanel";
 import { TriggersPanel } from "@/components/projects/TriggersPanel";
 import { FunctionsPanel } from "@/components/projects/FunctionsPanel";
+import { RealtimeDemo } from "@/components/data/RealtimeDemo";
 import { EmptyState, Spinner } from "@/components/ui";
 import type { Project } from "@/lib/types";
 
@@ -20,6 +21,7 @@ const TABS = [
   { key: "api-keys", label: "API Keys" },
   { key: "functions", label: "Functions" },
   { key: "triggers", label: "Triggers" },
+  { key: "realtime", label: "Realtime" },
   { key: "connection", label: "Connection" },
 ] as const;
 
@@ -47,6 +49,8 @@ export default function ProjectDetailPage() {
     ? "functions"
     : pathname.endsWith("/triggers")
     ? "triggers"
+    : pathname.endsWith("/realtime")
+    ? "realtime"
     : pathname.endsWith("/data")
     ? "data"
     : "overview";
@@ -187,6 +191,19 @@ export default function ProjectDetailPage() {
               <EmptyState
                 title="Connect a database first"
                 hint="Triggers fire on database events, so a connected database is required."
+              />
+            )}
+          </>
+        )}
+
+        {activeTab === "realtime" && (
+          <>
+            {hasConnection ? (
+              <RealtimeDemo projectId={projectId} />
+            ) : (
+              <EmptyState
+                title="Connect a database first"
+                hint="Realtime pushes database changes over a WebSocket, so a connected database is required."
               />
             )}
           </>

@@ -91,6 +91,11 @@ func (c *Conn) SubscribeToChanges(ctx context.Context, collection string, handle
 	return c.Adapter.SubscribeToChanges(ctx, collection, handler)
 }
 
+// RegisterRealtimeBroadcast forwards to the underlying adapter.
+func (c *Conn) RegisterRealtimeBroadcast(ctx context.Context, collection string) error {
+	return c.Adapter.RegisterRealtimeBroadcast(ctx, collection)
+}
+
 // Factory resolves and connects adapters, mirroring the server AdapterFactory
 // contract while returning the full DatabaseAdapter for feature use.
 type Factory struct{}

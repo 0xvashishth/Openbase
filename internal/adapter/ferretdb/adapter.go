@@ -361,6 +361,11 @@ func (a *Adapter) RemoveTrigger(ctx context.Context, triggerID string) error {
 	return fmt.Errorf("%w: ferretdb has no native triggers", adapter.ErrUnsupported)
 }
 
+// RegisterRealtimeBroadcast is unsupported: FerretDB has no native triggers.
+func (a *Adapter) RegisterRealtimeBroadcast(ctx context.Context, collection string) error {
+	return fmt.Errorf("%w: ferretdb realtime requires polling emulation (later phase)", adapter.ErrUnsupported)
+}
+
 // SubscribeToChanges is unsupported until a polling emulation lands (Phase 5).
 func (a *Adapter) SubscribeToChanges(ctx context.Context, collection string, handler adapter.ChangeHandler) (adapter.Subscription, error) {
 	return nil, fmt.Errorf("%w: ferretdb realtime requires polling emulation (later phase)", adapter.ErrUnsupported)

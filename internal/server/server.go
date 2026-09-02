@@ -14,6 +14,7 @@ import (
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/auth"
 	"github.com/openbase/openbase/internal/metadata"
+	"github.com/openbase/openbase/internal/realtime"
 )
 
 // Services carries the dependencies the API handlers need.
@@ -43,6 +44,10 @@ type Services struct {
 	// dispatches change events. If nil, trigger CRUD still works but events are
 	// not delivered to actions.
 	TriggerService TriggerRuntime
+
+	// RealtimeHub is the Phase 5 WebSocket gateway. If nil, the realtime
+	// endpoint returns 503.
+	RealtimeHub *realtime.Hub
 }
 
 // TriggerRuntime re-registers a project's DB triggers and starts change
@@ -100,6 +105,8 @@ type Adapter interface {
 	Insert(ctx context.Context, collection string, doc map[string]any) (adapter.InsertResult, error)
 	Update(ctx context.Context, filter adapter.Filter, update map[string]any) (adapter.UpdateResult, error)
 	Delete(ctx context.Context, filter adapter.Filter) (adapter.DeleteResult, error)
+	RegisterRealtimeBroadcast(ctx context.Context, collection string) error
+	SubscribeToChanges(ctx context.Context, collection string, handler adapter.ChangeHandler) (adapter.Subscription, error)
 	Capabilities() adapter.CapabilitySet
 	Disconnect(ctx context.Context) error
 }
@@ -159,6 +166,9 @@ func New(svc *Services) http.Handler {
 	mux.Handle("POST /v1/api/{collection}", s.requireAPIKey(http.HandlerFunc(s.apiInsertRow)))
 	mux.Handle("PUT /v1/api/{collection}/{id}", s.requireAPIKey(http.HandlerFunc(s.apiUpdateRow)))
 	mux.Handle("DELETE /v1/api/{collection}/{id}", s.requireAPIKey(http.HandlerFunc(s.apiDeleteRow)))
+
+	// Realtime WebSocket gateway (API-key-authenticated, project scoped via key).
+	mux.Handle("GET /v1/realtime", s.requireAPIKey(http.HandlerFunc(s.realtimeWS)))
 
 	cors := &CORS{AllowedOrigins: svc.AllowedOrigins}
 	return s.withRecovery(s.withLogging(cors.Middleware(mux)))

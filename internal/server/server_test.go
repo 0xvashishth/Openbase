@@ -65,7 +65,9 @@ func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
 		AdapterFactory: engine.NewFactory(),
 		Secrets:        secretsProv,
 		Provisioner:    prov,
+		RealtimeHub:    server.NewRealtimeHub(store, secretsProv, engine.NewFactory(), logger),
 	}
+	t.Cleanup(svc.RealtimeHub.CloseAll)
 
 	// Wire the trigger runtime (Phase 4) so trigger tests can run end-to-end.
 	trigSvc := triggers.NewService(

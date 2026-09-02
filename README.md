@@ -58,15 +58,16 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 3. **Phase 2** — Second adapter (FerretDB) to prove the abstraction generalizes (complete)
 4. **Phase 3** — Visual schema explorer + auto-generated REST API + API keys (complete)
 5. **Phase 4** — Triggers + runtime functions (complete)
-6. **Phase 5** — Realtime layer
+6. **Phase 5** — Realtime layer (complete)
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1)
 8. **Phase 7** — Remaining adapters (Valkey, graph, vector, MySQL) + polish
 
-> **Status:** Phases 0–4 are **complete** (API + metadata store + auth + encryption + Next.js
+> **Status:** Phases 0–5 are **complete** (API + metadata store + auth + encryption + Next.js
 > dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
 > explorer diagramming tables & FK relationships, capability-gated; per-project API keys powering an
-> auto-generated REST API `GET/POST/PUT/DELETE /v1/api/{collection}`; and a visual trigger builder +
+> auto-generated REST API `GET/POST/PUT/DELETE /v1/api/{collection}`; a visual trigger builder +
 > sandboxed Node function runtime, where table changes fire webhooks/functions via native
-> Postgres LISTEN/NOTIFY). External clients can hit their project's generated REST endpoints with an
+> Postgres LISTEN/NOTIFY; and a realtime WebSocket gateway `GET /v1/realtime` with a browser
+> live-updating-list SDK/demo). External clients can hit their project's generated REST endpoints with an
 > API key and attach webhook/function automation to data changes. See `PHASES.md` for the live
 > checklist.

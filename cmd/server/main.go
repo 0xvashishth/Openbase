@@ -82,6 +82,7 @@ func run(log *slog.Logger) error {
 		AdapterFactory: engine.NewFactory(),
 		Secrets:        secretsProv,
 		AllowedOrigins: cfg.AllowedOrigins,
+		RealtimeHub:    server.NewRealtimeHub(store, secretsProv, engine.NewFactory(), log),
 	}
 
 	// Trigger runtime (PHASES.md Phase 4): wires project triggers onto their DB

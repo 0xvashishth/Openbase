@@ -143,11 +143,11 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 ## Phase 5 — Realtime Layer
 **Goal:** Client SDK can subscribe to live data changes.
 
-- [ ] `SubscribeToChanges` implemented for Postgres (via logical replication) and FerretDB (via polling, clearly labeled as near-realtime not instant)
-- [ ] WebSocket gateway for client subscriptions
-- [ ] Minimal client SDK (JS/TS) demonstrating a live-updating list
+- [x] `SubscribeToChanges` implemented for Postgres (native LISTEN/NOTIFY) — delivered; FerretDB (polling, clearly labeled as near-realtime not instant) explicitly deferred to a follow-up (honest-capability rule)
+- [x] WebSocket gateway for client subscriptions (`GET /v1/realtime`, API-key authed)
+- [x] Minimal client SDK (JS/TS) + live-updating list demo in the dashboard
 
-**Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter.
+**Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter. — *Met: the dashboard "Realtime" tab subscribes over WebSocket and a live-updating list reflects REST inserts for Postgres; `RegisterRealtimeBroadcast` returns `ErrUnsupported` for non-native engines.*
 
 ## Phase 6 — BYODB Mode (mostly pulled forward into Phase 1)
 **Goal:** Users can connect an existing database instead of provisioning one.

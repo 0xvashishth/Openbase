@@ -229,6 +229,12 @@ type DatabaseAdapter interface {
 	RemoveTrigger(ctx context.Context, triggerID string) error
 
 	// Realtime.
+	// RegisterRealtimeBroadcast installs a native trigger that notifies change
+	// events for every row operation (insert/update/delete) on a collection, so
+	// SubscribeToChanges delivers live row data. Adapters without native
+	// triggers return ErrUnsupported (polling emulation replaced this in the
+	// future). It is idempotent.
+	RegisterRealtimeBroadcast(ctx context.Context, collection string) error
 	SubscribeToChanges(ctx context.Context, collection string, handler ChangeHandler) (Subscription, error)
 
 	// Capability introspection.

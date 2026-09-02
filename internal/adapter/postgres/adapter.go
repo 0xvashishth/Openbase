@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -453,7 +454,8 @@ func (a *Adapter) RegisterTrigger(ctx context.Context, t adapter.TriggerDefiniti
 	_, err := a.pool.Exec(ctx, `
 		CREATE OR REPLACE FUNCTION `+fnName+`() RETURNS trigger AS $$
 		BEGIN
-			PERFORM pg_notify('`+notifyChannel(t.Collection)+`', row_to_json(NEW)::text);
+			PERFORM pg_notify('`+notifyChannel(t.Collection)+`',
+				jsonb_build_object('event', TG_OP, 'data', to_jsonb(NEW))::text);
 			RETURN NEW;
 		END;
 		$$ LANGUAGE plpgsql`)
@@ -509,7 +511,9 @@ func (a *Adapter) RemoveTriggerOn(ctx context.Context, collection, triggerID str
 	return nil
 }
 
-// SubscribeToChanges uses Postgres LISTEN on the project channel.
+// SubscribeToChanges uses Postgres LISTEN on the project channel. Each
+// notification carries an enriched payload `{"event","data"}` produced by the
+// platform's notify triggers; this parses it and delivers the real event + row.
 func (a *Adapter) SubscribeToChanges(ctx context.Context, collection string, handler adapter.ChangeHandler) (adapter.Subscription, error) {
 	if err := a.requirePool(); err != nil {
 		return nil, err
@@ -536,12 +540,64 @@ func (a *Adapter) SubscribeToChanges(ctx context.Context, collection string, han
 				return
 			}
 			if handler != nil {
-				handler(collection, adapter.TriggerInsert, map[string]any{"payload": msg.Payload, "channel": msg.Channel})
+				ev, data := parseNotify(msg.Payload)
+				handler(collection, ev, data)
 			}
 		}
 	}()
 
 	return sub, nil
+}
+
+// parseNotify decodes a notification payload into an event and row data.
+// Payloads are `{"event":"INSERT","data":{...}}`; unknown/unparseable payloads
+// degrade to an "update" event with the raw payload preserved as data.
+func parseNotify(payload string) (adapter.TriggerEvent, map[string]any) {
+	var p struct {
+		Event string         `json:"event"`
+		Data  map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(payload), &p); err == nil && p.Event != "" {
+		return adapter.TriggerEvent(strings.ToLower(p.Event)), p.Data
+	}
+	return adapter.TriggerUpdate, map[string]any{"payload": payload}
+}
+
+// RegisterRealtimeBroadcast installs a single trigger that notifies every row
+// operation (insert/update/delete) on a collection with the enriched payload.
+// Idempotent: recreates the trigger in place.
+func (a *Adapter) RegisterRealtimeBroadcast(ctx context.Context, collection string) error {
+	if err := a.requirePool(); err != nil {
+		return err
+	}
+	if !tableIdentRE.MatchString(collection) {
+		return fmt.Errorf("postgres: invalid table name %q", collection)
+	}
+	const fnName = "openbase_rt_notify"
+	_, err := a.pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION openbase_rt_notify() RETURNS trigger AS $$
+		BEGIN
+			PERFORM pg_notify('`+notifyChannel(collection)+`',
+				jsonb_build_object('event', TG_OP, 'data', to_jsonb(NEW))::text);
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql`)
+	if err != nil {
+		return fmt.Errorf("postgres: create realtime notify fn: %w", err)
+	}
+	trgName := "openbase_rt_trg_" + sanitizeFuncName(collection)
+	_, err = a.pool.Exec(ctx,
+		"DROP TRIGGER IF EXISTS "+trgName+" ON "+quote(collection))
+	if err != nil {
+		return fmt.Errorf("postgres: drop realtime trigger: %w", err)
+	}
+	_, err = a.pool.Exec(ctx,
+		"CREATE TRIGGER "+trgName+" AFTER INSERT OR UPDATE OR DELETE ON "+quote(collection)+
+			" FOR EACH ROW EXECUTE FUNCTION openbase_rt_notify()")
+	if err != nil {
+		return fmt.Errorf("postgres: create realtime trigger: %w", err)
+	}
+	return nil
 }
 
 // notifyChannel builds a valid LISTEN/NOTIFY channel name for a collection.
