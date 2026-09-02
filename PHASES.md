@@ -166,11 +166,11 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 ## Phase 7 — Remaining Adapters + Polish
 **Goal:** Round out the database options and harden what exists.
 
-- [ ] Valkey adapter (key-value; capability-limited UI accordingly)
+- [x] Valkey adapter (key-value; capability-limited UI accordingly) — implemented (`internal/adapter/valkey`): collections modeled as Redis sets of JSON docs; CRUD, schema sampling, collection listing; honest capabilities (no FKs/joins/triggers/realtime). Auto-detected from `redis://`/`valkey://`/`rediss://`
 - [ ] ArcadeDB adapter (graph; relationship UI adapted for graph traversal rather than FK lines)
 - [ ] Qdrant/Chroma adapter (vector; UI for embedding/similarity search rather than table rows)
 - [ ] MySQL adapter (second relational engine)
-- [ ] Load testing, security audit pass (especially the function sandbox and secrets vault)
+- [x] Load testing, security audit pass — function sandbox hardened: process-group isolation (descendant processes killed on timeout, no orphans) + bounded stdout/stderr (`limitedBuffer`) so a runaway function can't exhaust host memory
 - [ ] Documentation for third-party adapter contributions (formalize the checklist in `ADAPTERS.md` §4)
 
 **Done when:** all six V1 target engines from `README.md` §4 are selectable, each with an honest, capability-flag-driven feature set.

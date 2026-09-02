@@ -62,13 +62,17 @@ The dashboard and API layer **query this before rendering a feature**. Example: 
 | PostgreSQL | Yes | Yes | Yes | Native (logical replication) | Yes | Yes (pgvector) |
 | MySQL | Yes | Yes | Yes | Polling / binlog-based | Yes | No |
 | FerretDB (on Postgres) ¹ | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
-| Valkey | No | No | No | Native (pub/sub) | Limited | No |
+| Valkey ² | No | No | No | `none` (keyspace notifs not implemented) | No | No |
 | ArcadeDB (graph) | N/A (graph traversal instead) | N/A | Limited | Polling | Yes | Yes |
 | Qdrant / Chroma (vector) | No | No | No | No | No | Yes (native) |
 
 ¹ The shipped FerretDB adapter currently returns `Realtime:none` in `Capabilities()`; the polling-based
 emulation tier (ADAPTERS.md §3, tier 2) arrives with the triggers/realtime phases, at which point the
 flag flips to `polling` and this row becomes accurate in code, not just intent.
+
+² The shipped Valkey adapter uses Redis sets of JSON docs as collections. It currently returns
+`Realtime:none` — a Redis keyspace-notifications change stream is a candidate future tier, but has not
+been implemented, so the honest value is `none`, not the `pub/sub` intent above.
 
 This table should live in code as the actual `Capabilities()` return values, not just documentation — keep them in sync.
 

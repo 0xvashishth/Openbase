@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -26,6 +28,10 @@ var Timeout = 5 * time.Second
 
 // MaxMemoryMB is the V8 heap limit applied to function subprocesses.
 const MaxMemoryMB = 128
+
+// isLinux is computed at package scope where the `runtime` identifier is not
+// shadowed by Run's parameter of the same name.
+const isLinux = runtime.GOOS == "linux"
 
 // nodeSandbox executes Node.js functions via a small wrapper that requires the
 // user module, calls exports.handler(event), and prints the JSON result.
@@ -98,9 +104,19 @@ func (nodeSandbox) Run(ctx context.Context, source, runtime string, event map[st
 	cmd.Env = append(os.Environ(), "OB_FUNCTION_PATH="+modPath)
 	cmd.Stdin = bytes.NewReader(payload)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Run the function as a new process group so that any child processes the
+	// user module spawns are killed alongside it — CommandContext alone only
+	// SIGKILLs the direct child, which would otherwise let a forked process
+	// outlive the sandbox timeout.
+	if isLinux {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+	defer killGroup(cmd)
+
+	stdout := &limitedBuffer{max: maxOutputBytes}
+	stderr := &limitedBuffer{max: maxOutputBytes}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
@@ -119,4 +135,48 @@ func (nodeSandbox) Run(ctx context.Context, source, runtime string, event map[st
 		return nil, fmt.Errorf("function: result not valid JSON: %w: %s", err, stdout.String())
 	}
 	return result, nil
+}
+
+// maxOutputBytes caps how much a single function may write to stdout/stderr.
+var maxOutputBytes = 1 << 20 // 1 MiB
+
+// limitedBuffer is an in-memory buffer that stops accepting writes past max,
+// so a runaway function printing a huge amount can't exhaust platform memory.
+type limitedBuffer struct {
+	buf bytes.Buffer
+	max int
+	cut bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.buf.Len() >= b.max {
+		b.cut = true
+		return len(p), nil
+	}
+	remaining := b.max - b.buf.Len()
+	if len(p) > remaining {
+		b.cut = true
+		p = p[:remaining]
+	}
+	_, _ = b.buf.Write(p)
+	return len(p), nil
+}
+
+func (b *limitedBuffer) Bytes() []byte { return b.buf.Bytes() }
+func (b *limitedBuffer) String() string {
+	s := b.buf.String()
+	if b.cut {
+		s += "\n(truncated: function output exceeded limit)"
+	}
+	return s
+}
+
+// killGroup terminates the whole process group of cmd on non-Linux platforms
+// it is a no-op because there is no process group to signal.
+func killGroup(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil || !isLinux {
+		return
+	}
+	// Negative pid signals the entire process group (Setpgid above).
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }

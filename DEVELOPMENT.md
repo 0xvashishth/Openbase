@@ -61,6 +61,10 @@ All config is env-driven (`internal/config`). The most important:
 All Go tests hit a **real Postgres in Docker** (`internal/testutil` spins one up and
 skips gracefully when Docker is unavailable). No mocks for the DB layer (ADAPTERS.md §4).
 
+The **Valkey adapter** is the one deliberate exception: its tests use
+[`miniredis`](https://github.com/alicebob/miniredis) (an in-process Redis-protocol server),
+so the key-value adapter is fully covered even without a Docker daemon or an external Redis.
+
 ```bash
 go test ./...     # full suite (provisioning tests need the Docker daemon and skip if absent)
 make test-short   # -short variant

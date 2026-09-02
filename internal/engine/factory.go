@@ -10,13 +10,14 @@ import (
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/adapter/ferretdb"
 	"github.com/openbase/openbase/internal/adapter/postgres"
+	"github.com/openbase/openbase/internal/adapter/valkey"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/server"
 )
 
 // Conn holds a connected adapter.
 type Conn struct {
-	Engine   adapter.Engine
+	Engine  adapter.Engine
 	Adapter adapter.DatabaseAdapter
 }
 
@@ -116,6 +117,8 @@ func (f *Factory) ConnectForEngine(ctx context.Context, engine adapter.Engine, c
 		a = postgres.New()
 	case adapter.EngineFerretDB:
 		a = ferretdb.New()
+	case adapter.EngineValkey:
+		a = valkey.New()
 	default:
 		return nil, fmt.Errorf("%w: engine %q not yet implemented", adapter.ErrUnsupported, engine)
 	}

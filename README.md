@@ -40,14 +40,14 @@ Every feature (auth, triggers, realtime, API generation, visualization) talks to
 
 All chosen for **permissive, redistribution-safe licenses** — no SSPL, no BSL restrictions on hosting as part of a product.
 
-| Category | Engine | License |
-|---|---|---|
-| Relational | PostgreSQL | PostgreSQL License (BSD-style) |
-| Relational | MySQL Community | GPLv2 |
-| Document (Mongo-compatible) | FerretDB (on Postgres) | Apache 2.0 |
-| Key-Value / Cache | Valkey (Redis fork) | BSD |
-| Graph | ArcadeDB | Apache 2.0 |
-| Vector (AI/embeddings) | Qdrant or Chroma | Apache 2.0 |
+| Category | Engine | License | Adapter |
+|---|---|---|---|
+| Relational | PostgreSQL | PostgreSQL License (BSD-style) | ✅ implemented |
+| Relational | MySQL Community | GPLv2 | planned |
+| Document (Mongo-compatible) | FerretDB (on Postgres) | Apache 2.0 | ✅ implemented |
+| Key-Value / Cache | Valkey (Redis fork) | BSD | ✅ implemented |
+| Graph | ArcadeDB | Apache 2.0 | planned |
+| Vector (AI/embeddings) | Qdrant or Chroma | Apache 2.0 | planned |
 
 BYODB mode additionally accepts connection strings to **any** database the adapter layer supports, including ones the platform doesn't provision itself (e.g. a user's existing real MongoDB Atlas cluster) — the platform just connects, it doesn't redistribute that engine, so licensing concerns don't apply there.
 
@@ -60,7 +60,7 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 5. **Phase 4** — Triggers + runtime functions (complete)
 6. **Phase 5** — Realtime layer (complete)
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1) (complete)
-8. **Phase 7** — Remaining adapters (Valkey, graph, vector, MySQL) + polish
+8. **Phase 7** — Remaining adapters (Valkey ✅, graph, vector, MySQL) + polish (in progress — Valkey adapter + function-sandbox hardening done)
 
 > **Status:** Phases 0–6 are **complete** (API + metadata store + auth + encryption + Next.js
 > dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
@@ -70,6 +70,10 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 > Postgres LISTEN/NOTIFY; a realtime WebSocket gateway `GET /v1/realtime` with a browser
 > live-updating-list SDK/demo; and BYODB hardening — multi-key envelope encryption with key
 > rotation (`encryption_key_id`-keyed decrypt) plus honest capability gating for triggers/realtime).
+> Phase 7 progress: a Valkey key-value adapter (`redis://` auto-detect, collections as JSON sets,
+> honest capabilities — no FKs/joins/triggers/realtime, all `ErrUnsupported`) and a function-sandbox
+> security audit (process-group isolation so descendant processes die on timeout, plus bounded
+> stdout/stderr capture so a runaway function can't exhaust host memory).
 > External clients can hit their project's generated REST endpoints with an
 > API key and attach webhook/function automation to data changes. See `PHASES.md` for the live
 > checklist.
