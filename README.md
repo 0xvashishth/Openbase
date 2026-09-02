@@ -56,14 +56,15 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 1. **Phase 0** — Platform metadata service, auth, org/project CRUD (complete)
 2. **Phase 1** — Adapter interface + first adapter (Postgres), provisioned-mode creation, table browser (complete)
 3. **Phase 2** — Second adapter (FerretDB) to prove the abstraction generalizes (complete)
-4. **Phase 3** — Visual schema explorer + auto-generated REST API
+4. **Phase 3** — Visual schema explorer + auto-generated REST API + API keys (complete)
 5. **Phase 4** — Triggers + runtime functions
 6. **Phase 5** — Realtime layer
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1)
 8. **Phase 7** — Remaining adapters (Valkey, graph, vector, MySQL) + polish
 
-> **Status:** Phases 0–2 are **complete** (API + metadata store + auth + encryption + Next.js
-> dashboard; Postgres adapter with provisioned + BYODB modes; a second FerretDB adapter — Mongo
-> wire-compatible — with its own provisioner group and engine picker in the dashboard). Both engines
-> are verified end-to-end against real databases in Docker; the same table browser runs unmodified
-> over either. Next up is Phase 3. See `PHASES.md` for the live checklist.
+> **Status:** Phases 0–3 are **complete** (API + metadata store + auth + encryption + Next.js
+> dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
+> explorer diagramming tables & FK relationships, capability-gated; per-project API keys powering an
+> auto-generated REST API `GET/POST/PUT/DELETE /v1/api/{collection}`). External clients can hit their
+> project's generated REST endpoints with an API key. Next up is Phase 4. See `PHASES.md` for the
+> live checklist.

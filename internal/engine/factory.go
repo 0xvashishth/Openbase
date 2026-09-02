@@ -43,6 +43,31 @@ func (c *Conn) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.Res
 	return c.Adapter.Query(ctx, q)
 }
 
+// ListRelationships forwards to the underlying adapter.
+func (c *Conn) ListRelationships(ctx context.Context) ([]adapter.Relationship, error) {
+	return c.Adapter.ListRelationships(ctx)
+}
+
+// Insert forwards to the underlying adapter.
+func (c *Conn) Insert(ctx context.Context, collection string, doc map[string]any) (adapter.InsertResult, error) {
+	return c.Adapter.Insert(ctx, collection, doc)
+}
+
+// Update forwards to the underlying adapter.
+func (c *Conn) Update(ctx context.Context, filter adapter.Filter, update map[string]any) (adapter.UpdateResult, error) {
+	return c.Adapter.Update(ctx, filter, update)
+}
+
+// Delete forwards to the underlying adapter.
+func (c *Conn) Delete(ctx context.Context, filter adapter.Filter) (adapter.DeleteResult, error) {
+	return c.Adapter.Delete(ctx, filter)
+}
+
+// Capabilities forwards to the underlying adapter.
+func (c *Conn) Capabilities() adapter.CapabilitySet {
+	return c.Adapter.Capabilities()
+}
+
 // Factory resolves and connects adapters, mirroring the server AdapterFactory
 // contract while returning the full DatabaseAdapter for feature use.
 type Factory struct{}

@@ -6,12 +6,16 @@ import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { ConnectionPanel } from "@/components/projects/ConnectionPanel";
 import { TableBrowser } from "@/components/data/TableBrowser";
+import { SchemaExplorer } from "@/components/schema/SchemaExplorer";
+import { APIKeysPanel } from "@/components/projects/APIKeysPanel";
 import { EmptyState, Spinner } from "@/components/ui";
 import type { Project } from "@/lib/types";
 
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "data", label: "Tables" },
+  { key: "schema", label: "Schema" },
+  { key: "api-keys", label: "API Keys" },
   { key: "connection", label: "Connection" },
 ] as const;
 
@@ -26,10 +30,15 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
+  const [engine, setEngine] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeTab: TabKey = pathname.endsWith("/connection")
     ? "connection"
+    : pathname.endsWith("/schema")
+    ? "schema"
+    : pathname.endsWith("/api-keys")
+    ? "api-keys"
     : pathname.endsWith("/data")
     ? "data"
     : "overview";
@@ -44,8 +53,14 @@ export default function ProjectDetailPage() {
     });
     api
       .getConnection(token, projectId)
-      .then((c) => setHasConnection(c.status === "connected"))
-      .catch(() => setHasConnection(false));
+      .then((c) => {
+        setHasConnection(c.status === "connected");
+        setEngine(c.engine);
+      })
+      .catch(() => {
+        setHasConnection(false);
+        setEngine(null);
+      });
   }, [orgId, projectId]);
 
   const go = (tab: TabKey) => {
@@ -111,6 +126,10 @@ export default function ProjectDetailPage() {
                 <button onClick={() => go("data")} className="text-brand-600 hover:text-brand-700">
                   Tables
                 </button>
+                , or visualize the schema under{" "}
+                <button onClick={() => go("schema")} className="text-brand-600 hover:text-brand-700">
+                  Schema
+                </button>
                 .
               </p>
             </div>
@@ -126,6 +145,18 @@ export default function ProjectDetailPage() {
               hint="Head to the Connection tab to attach a database, then come back to browse tables."
             />
           ))}
+
+        {activeTab === "schema" &&
+          (hasConnection ? (
+            <SchemaExplorer projectId={projectId} engine={engine ?? "unknown"} />
+          ) : (
+            <EmptyState
+              title="Connect a database first"
+              hint="Head to the Connection tab to attach a database, then come back to visualize the schema."
+            />
+          ))}
+
+        {activeTab === "api-keys" && <APIKeysPanel projectId={projectId} />}
 
         {activeTab === "connection" && <ConnectionPanel projectId={projectId} />}
       </div>

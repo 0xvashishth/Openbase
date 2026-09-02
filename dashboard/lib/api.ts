@@ -1,8 +1,10 @@
 "use client";
 
 import type {
+  APIKeyView,
   AuthResponse,
   Connection,
+  FullSchema,
   Organization,
   Project,
   QueryRowsRequest,
@@ -129,7 +131,19 @@ export const api = {
   listCollections: (token: string, projectId: string) =>
     request<{ name: string }[]>("GET", `/v1/projects/${projectId}/collections`, undefined, token),
   getSchema: (token: string, projectId: string, collection: string) =>
-    request<SchemaInfo>("GET", `/v1/projects/${projectId}/collections/${collection}`, undefined, token),
+    request<SchemaInfo>(`GET`, `/v1/projects/${projectId}/collections/${collection}`, undefined, token),
   queryRows: (token: string, projectId: string, body: QueryRowsRequest) =>
     request<ResultSet>("POST", `/v1/projects/${projectId}/query`, body, token),
+  getFullSchema: (token: string, projectId: string) =>
+    request<FullSchema>("GET", `/v1/projects/${projectId}/schema`, undefined, token),
+
+  // API keys.
+  listAPIKeys: (token: string, projectId: string) =>
+    request<APIKeyView[]>("GET", `/v1/projects/${projectId}/api-keys`, undefined, token),
+  createAPIKey: (token: string, projectId: string, name: string) =>
+    request<{ id: string; name: string; plaintext: string; key_hash: string; scopes: string[]; created_at: string }>(
+      "POST", `/v1/projects/${projectId}/api-keys`, { name }, token
+    ),
+  revokeAPIKey: (token: string, projectId: string, keyID: string) =>
+    request<{ revoked: boolean }>("DELETE", `/v1/projects/${projectId}/api-keys/${keyID}`, undefined, token),
 };

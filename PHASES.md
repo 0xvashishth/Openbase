@@ -72,12 +72,30 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 ## Phase 3 — Visual Schema Explorer + Auto-Generated API
 **Goal:** The Supabase-style "see your tables and how they relate" feature, plus a REST API generated from the schema.
 
-- [ ] Relationship diagram UI (React Flow or similar) showing tables, PK/FK lines — only rendered for adapters where `SupportsForeignKeys` is true
-- [ ] Auto-generated REST endpoints per collection/table (CRUD), scoped by API key
-- [ ] API key management UI (`api_keys` table from `SCHEMA.md`)
+- [x] Relationship diagram UI (React Flow) showing tables, PK/FK lines — only rendered for adapters where `SupportsForeignKeys` is true
+- [x] Auto-generated REST endpoints per collection/table (CRUD), scoped by API key
+- [x] API key management UI (`api_keys` table from `SCHEMA.md`)
 - [ ] (Stretch) GraphQL layer generated from the same schema introspection
 
-**Done when:** a user can visually see their schema and hit a real REST endpoint from outside the platform using an API key.
+**Status (complete ✅):**
+- **API keys**: `internal/apikey` (already present) wired to real handlers + middleware.
+  `POST /v1/projects/{id}/api-keys` returns the plaintext `ob_...` key once; `GET` lists
+  (never the hash/plaintext), `DELETE /{keyID}` revokes. Scopes default to read+write.
+- **Auto-generated REST API** (external access, authenticated by API key):
+  `GET /v1/api/tables`, `GET /v1/api/{collection}` (with `?limit`/`?offset`/`?order_by=&order=`),
+  `GET /v1/api/{collection}/_schema`, `POST /v1/api/{collection}`, `PUT/DELETE /v1/api/{collection}/{id}`.
+  The project is resolved from the key itself (no project ID in the URL). Rejected/invalid keys → 401.
+- **Schema explorer**: new `GET /v1/projects/{id}/schema` returns all collections + schemas +
+  FK relationships + honest `capabilities`. Dashboard gains a **Schema** tab using React Flow
+  (`@xyflow/react`) rendering each table as a node (PK/UQ markers, data types) and FK lines as
+  edges. The relationship diagram is **capability-gated**: engines without `SupportsForeignKeys`
+  (e.g. FerretDB) show the tables without edges and a clear note — no broken rendering.
+- **API Keys tab** in the dashboard: create (one-time plaintext), list, revoke, plus an
+  "Using the API" reference.
+- **Done when:** a user can visually see their schema and hit a real REST endpoint from outside
+  the platform using an API key — *met.* Backend CRUD/schema/key tests verified against real
+  Postgres in Docker (`internal/server/apikey_test.go`, `internal/server/data_test.go`);
+  the dashboard typechecks and `npm run build` passes.
 
 ## Phase 4 — Triggers + Runtime Functions
 **Goal:** Visual trigger builder + sandboxed function execution.

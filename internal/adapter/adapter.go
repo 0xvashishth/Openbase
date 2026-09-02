@@ -18,14 +18,14 @@ var ErrUnsupported = errors.New("adapter: operation not supported by this engine
 // layer query this before rendering a feature so the UI can honestly reflect
 // the engine's limits rather than showing broken/empty views.
 type CapabilitySet struct {
-	SupportsRelationalJoins bool
-	SupportsForeignKeys     bool
-	SupportsNativeTriggers  bool
-	SupportsChangeStreams   bool
-	SupportsRealtime        RealtimeMode
-	SupportsTransactions    bool
-	SupportsFullTextSearch  bool
-	SupportsVectorSearch    bool
+	SupportsRelationalJoins bool        `json:"supports_relational_joins"`
+	SupportsForeignKeys     bool        `json:"supports_foreign_keys"`
+	SupportsNativeTriggers  bool        `json:"supports_native_triggers"`
+	SupportsChangeStreams   bool        `json:"supports_change_streams"`
+	SupportsRealtime        RealtimeMode `json:"supports_realtime"`
+	SupportsTransactions    bool        `json:"supports_transactions"`
+	SupportsFullTextSearch  bool        `json:"supports_full_text_search"`
+	SupportsVectorSearch    bool        `json:"supports_vector_search"`
 }
 
 // RealtimeMode describes how (if at all) an engine delivers live changes.

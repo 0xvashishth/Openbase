@@ -83,7 +83,12 @@ type AdapterFactory interface {
 type Adapter interface {
 	ListCollections(ctx context.Context) ([]adapter.CollectionInfo, error)
 	GetSchema(ctx context.Context, collection string) (adapter.SchemaInfo, error)
+	ListRelationships(ctx context.Context) ([]adapter.Relationship, error)
 	Query(ctx context.Context, q adapter.UniversalQuery) (adapter.ResultSet, error)
+	Insert(ctx context.Context, collection string, doc map[string]any) (adapter.InsertResult, error)
+	Update(ctx context.Context, filter adapter.Filter, update map[string]any) (adapter.UpdateResult, error)
+	Delete(ctx context.Context, filter adapter.Filter) (adapter.DeleteResult, error)
+	Capabilities() adapter.CapabilitySet
 	Disconnect(ctx context.Context) error
 }
 
@@ -117,6 +122,20 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/projects/{projectID}/collections", s.requireAuth(http.HandlerFunc(s.listCollections)))
 	mux.Handle("GET /v1/projects/{projectID}/collections/{collection}", s.requireAuth(http.HandlerFunc(s.getSchema)))
 	mux.Handle("POST /v1/projects/{projectID}/query", s.requireAuth(http.HandlerFunc(s.queryRows)))
+	mux.Handle("GET /v1/projects/{projectID}/schema", s.requireAuth(http.HandlerFunc(s.getFullSchema)))
+
+	// API key management (dashboard-authenticated).
+	mux.Handle("GET /v1/projects/{projectID}/api-keys", s.requireAuth(http.HandlerFunc(s.listAPIKeys)))
+	mux.Handle("POST /v1/projects/{projectID}/api-keys", s.requireAuth(http.HandlerFunc(s.createAPIKey)))
+	mux.Handle("DELETE /v1/projects/{projectID}/api-keys/{keyID}", s.requireAuth(http.HandlerFunc(s.revokeAPIKey)))
+
+	// Auto-generated REST API (API-key-authenticated, project scoped via key).
+	mux.Handle("GET /v1/api/tables", s.requireAPIKey(http.HandlerFunc(s.apiListTables)))
+	mux.Handle("GET /v1/api/{collection}", s.requireAPIKey(http.HandlerFunc(s.apiQueryRows)))
+	mux.Handle("GET /v1/api/{collection}/_schema", s.requireAPIKey(http.HandlerFunc(s.apiGetTableSchema)))
+	mux.Handle("POST /v1/api/{collection}", s.requireAPIKey(http.HandlerFunc(s.apiInsertRow)))
+	mux.Handle("PUT /v1/api/{collection}/{id}", s.requireAPIKey(http.HandlerFunc(s.apiUpdateRow)))
+	mux.Handle("DELETE /v1/api/{collection}/{id}", s.requireAPIKey(http.HandlerFunc(s.apiDeleteRow)))
 
 	cors := &CORS{AllowedOrigins: svc.AllowedOrigins}
 	return s.withRecovery(s.withLogging(cors.Middleware(mux)))
@@ -148,7 +167,10 @@ func (s *Server) withRecovery(next http.Handler) http.Handler {
 
 type ctxKey string
 
-const ctxUserID ctxKey = "userID"
+const (
+	ctxUserID    ctxKey = "userID"
+	ctxProjectID ctxKey = "projectID"
+)
 
 // ---- helpers ----
 

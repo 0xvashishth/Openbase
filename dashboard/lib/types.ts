@@ -99,3 +99,37 @@ export interface ResultSet {
   columns: string[];
   rows: Record<string, unknown>[];
 }
+
+// Schema explorer types.
+
+export interface Relationship {
+  from_collection: string;
+  from_column: string;
+  to_collection: string;
+  to_column: string;
+}
+
+export interface CapabilitySet {
+  supports_relational_joins: boolean;
+  supports_foreign_keys: boolean;
+  supports_native_triggers: boolean;
+  supports_change_streams: boolean;
+  supports_realtime: string;
+  supports_transactions: boolean;
+  supports_full_text_search: boolean;
+  supports_vector_search: boolean;
+}
+
+export interface FullSchema {
+  collections: SchemaInfo[];
+  relationships: Relationship[];
+  capabilities: CapabilitySet;
+}
+
+export interface APIKeyView {
+  id: string;
+  name: string;
+  scopes: string[];
+  created_at: string;
+  revoked_at?: string;
+}
