@@ -38,6 +38,18 @@ type Services struct {
 	// instances (ARCHITECTURE.md §2.7). If nil, "provisioned" project creation
 	// returns 501.
 	Provisioner Provisioner
+
+	// TriggerService wires project triggers onto their DB adapter and
+	// dispatches change events. If nil, trigger CRUD still works but events are
+	// not delivered to actions.
+	TriggerService TriggerRuntime
+}
+
+// TriggerRuntime re-registers a project's DB triggers and starts change
+// subscriptions after trigger config changes or a (re)connect.
+type TriggerRuntime interface {
+	RegisterProject(ctx context.Context, conn metadata.Connection, secret metadata.ConnectionSecret) error
+	StopProject(projectID string)
 }
 
 // Provisioner creates and destroys dedicated per-project database instances.
@@ -128,6 +140,17 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/projects/{projectID}/api-keys", s.requireAuth(http.HandlerFunc(s.listAPIKeys)))
 	mux.Handle("POST /v1/projects/{projectID}/api-keys", s.requireAuth(http.HandlerFunc(s.createAPIKey)))
 	mux.Handle("DELETE /v1/projects/{projectID}/api-keys/{keyID}", s.requireAuth(http.HandlerFunc(s.revokeAPIKey)))
+
+	// Triggers + runtime functions.
+	mux.Handle("GET /v1/projects/{projectID}/triggers", s.requireAuth(http.HandlerFunc(s.listTriggers)))
+	mux.Handle("POST /v1/projects/{projectID}/triggers", s.requireAuth(http.HandlerFunc(s.createTrigger)))
+	mux.Handle("PUT /v1/projects/{projectID}/triggers/{triggerID}", s.requireAuth(http.HandlerFunc(s.updateTrigger)))
+	mux.Handle("DELETE /v1/projects/{projectID}/triggers/{triggerID}", s.requireAuth(http.HandlerFunc(s.deleteTrigger)))
+
+	mux.Handle("GET /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.listFunctions)))
+	mux.Handle("POST /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.createFunction)))
+	mux.Handle("GET /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.getFunction)))
+	mux.Handle("DELETE /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.deleteFunction)))
 
 	// Auto-generated REST API (API-key-authenticated, project scoped via key).
 	mux.Handle("GET /v1/api/tables", s.requireAPIKey(http.HandlerFunc(s.apiListTables)))

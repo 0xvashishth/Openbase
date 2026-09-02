@@ -8,6 +8,8 @@ import { ConnectionPanel } from "@/components/projects/ConnectionPanel";
 import { TableBrowser } from "@/components/data/TableBrowser";
 import { SchemaExplorer } from "@/components/schema/SchemaExplorer";
 import { APIKeysPanel } from "@/components/projects/APIKeysPanel";
+import { TriggersPanel } from "@/components/projects/TriggersPanel";
+import { FunctionsPanel } from "@/components/projects/FunctionsPanel";
 import { EmptyState, Spinner } from "@/components/ui";
 import type { Project } from "@/lib/types";
 
@@ -16,6 +18,8 @@ const TABS = [
   { key: "data", label: "Tables" },
   { key: "schema", label: "Schema" },
   { key: "api-keys", label: "API Keys" },
+  { key: "functions", label: "Functions" },
+  { key: "triggers", label: "Triggers" },
   { key: "connection", label: "Connection" },
 ] as const;
 
@@ -39,6 +43,10 @@ export default function ProjectDetailPage() {
     ? "schema"
     : pathname.endsWith("/api-keys")
     ? "api-keys"
+    : pathname.endsWith("/functions")
+    ? "functions"
+    : pathname.endsWith("/triggers")
+    ? "triggers"
     : pathname.endsWith("/data")
     ? "data"
     : "overview";
@@ -157,6 +165,32 @@ export default function ProjectDetailPage() {
           ))}
 
         {activeTab === "api-keys" && <APIKeysPanel projectId={projectId} />}
+
+        {activeTab === "functions" && (
+          <>
+            {hasConnection ? (
+              <FunctionsPanel projectId={projectId} />
+            ) : (
+              <EmptyState
+                title="Connect a database first"
+                hint="Functions run in response to database events, so a connected database is required."
+              />
+            )}
+          </>
+        )}
+
+        {activeTab === "triggers" && (
+          <>
+            {hasConnection ? (
+              <TriggersPanel projectId={projectId} />
+            ) : (
+              <EmptyState
+                title="Connect a database first"
+                hint="Triggers fire on database events, so a connected database is required."
+              />
+            )}
+          </>
+        )}
 
         {activeTab === "connection" && <ConnectionPanel projectId={projectId} />}
       </div>

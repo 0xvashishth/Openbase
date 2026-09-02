@@ -100,6 +100,55 @@ type APIKey struct {
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }
 
+// TriggerEvent mirrors SCHEMA.md triggers.event CHECK constraint.
+type TriggerEvent string
+
+const (
+	TriggerInsert TriggerEvent = "insert"
+	TriggerUpdate TriggerEvent = "update"
+	TriggerDelete TriggerEvent = "delete"
+)
+
+// TriggerActionType mirrors SCHEMA.md triggers.action_type CHECK constraint.
+type TriggerActionType string
+
+const (
+	ActionFunction TriggerActionType = "function"
+	ActionWebhook  TriggerActionType = "webhook"
+)
+
+// Trigger is a per-project rule: when `event` happens on `collection`, invoke
+// `action_type` with `action_target` (a function id or webhook URL).
+type Trigger struct {
+	ID           string            `json:"id"`
+	ProjectID    string            `json:"project_id"`
+	Name         string            `json:"name"`
+	Collection   string            `json:"collection"`
+	Event        TriggerEvent      `json:"event"`
+	ActionType   TriggerActionType `json:"action_type"`
+	ActionTarget string            `json:"action_target"`
+	Enabled      bool              `json:"enabled"`
+	CreatedAt    time.Time         `json:"created_at"`
+}
+
+// FunctionRuntime mirrors SCHEMA.md functions.runtime CHECK constraint.
+type FunctionRuntime string
+
+const (
+	RuntimeNode   FunctionRuntime = "node"
+	RuntimePython FunctionRuntime = "python"
+)
+
+// Function is a user-authored source code function stored with a source_ref.
+type Function struct {
+	ID        string          `json:"id"`
+	ProjectID string          `json:"project_id"`
+	Name      string          `json:"name"`
+	Runtime   FunctionRuntime `json:"runtime"`
+	Source    string          `json:"source"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
 // ConnectionSecret holds decrypted credentials handed to an adapter at
 // runtime; it is never persisted.
 type ConnectionSecret struct {
@@ -141,4 +190,17 @@ type Store interface {
 	GetAPIKeyByHash(ctx context.Context, hash string) (*APIKey, error)
 	ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, error)
 	RevokeAPIKey(ctx context.Context, id string) error
+
+	// Triggers.
+	CreateTrigger(ctx context.Context, t *Trigger) error
+	GetTrigger(ctx context.Context, projectID, id string) (*Trigger, error)
+	ListTriggers(ctx context.Context, projectID string) ([]Trigger, error)
+	UpdateTrigger(ctx context.Context, t *Trigger) error
+	DeleteTrigger(ctx context.Context, projectID, id string) error
+
+	// Functions.
+	CreateFunction(ctx context.Context, f *Function) error
+	GetFunction(ctx context.Context, projectID, id string) (*Function, error)
+	ListFunctions(ctx context.Context, projectID string) ([]Function, error)
+	DeleteFunction(ctx context.Context, projectID, id string) error
 }

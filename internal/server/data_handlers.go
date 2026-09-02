@@ -170,6 +170,11 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-register any triggers on the newly connected database.
+	if s.svc.TriggerService != nil {
+		_ = s.svc.TriggerService.RegisterProject(r.Context(), *conn, secret)
+	}
+
 	// Never echo ciphertext or raw secret back.
 	conn.EncryptedConnString = nil
 	conn.EncryptedUsername = nil
@@ -211,6 +216,9 @@ func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
 	if err := s.svc.Store.DeleteConnection(r.Context(), existing.ID); err != nil {
 		s.writeErr(w, err)
 		return
+	}
+	if s.svc.TriggerService != nil {
+		s.svc.TriggerService.StopProject(projectID)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }

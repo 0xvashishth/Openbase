@@ -16,10 +16,12 @@ import (
 
 	"github.com/openbase/openbase/internal/auth"
 	"github.com/openbase/openbase/internal/engine"
+	"github.com/openbase/openbase/internal/function"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/secrets"
 	"github.com/openbase/openbase/internal/server"
 	"github.com/openbase/openbase/internal/testutil"
+	"github.com/openbase/openbase/internal/triggers"
 	"github.com/openbase/openbase/migrations"
 )
 
@@ -64,6 +66,23 @@ func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
 		Secrets:        secretsProv,
 		Provisioner:    prov,
 	}
+
+	// Wire the trigger runtime (Phase 4) so trigger tests can run end-to-end.
+	trigSvc := triggers.NewService(
+		store,
+		&engine.TriggerConnector{Factory: engine.NewFactory()},
+		&triggers.Dispatcher{
+			Store:  store,
+			Log:    logger,
+			Action: &triggers.DispatchGroup{Actions: []triggers.Action{
+				&triggers.EndpointAction{Log: logger},
+				&triggers.FunctionAction{Store: store, Runner: function.New(), Log: logger},
+			}},
+		},
+		logger,
+	)
+	svc.TriggerService = trigSvc
+	t.Cleanup(trigSvc.Stop)
 
 	ts := httptest.NewServer(server.New(svc))
 	t.Cleanup(ts.Close)

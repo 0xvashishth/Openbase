@@ -133,3 +133,31 @@ export interface APIKeyView {
   created_at: string;
   revoked_at?: string;
 }
+
+// Triggers + runtime functions (Phase 4).
+
+export type TriggerEvent = "insert" | "update" | "delete";
+export type TriggerActionType = "function" | "webhook";
+
+export interface Trigger {
+  id: string;
+  project_id: string;
+  name: string;
+  collection: string;
+  event: TriggerEvent;
+  action_type: TriggerActionType;
+  action_target: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export type FunctionRuntime = "node" | "python";
+
+export interface Function {
+  id: string;
+  project_id: string;
+  name: string;
+  runtime: FunctionRuntime;
+  source: string;
+  created_at: string;
+}

@@ -17,10 +17,12 @@ import (
 	"github.com/openbase/openbase/internal/auth"
 	"github.com/openbase/openbase/internal/config"
 	"github.com/openbase/openbase/internal/engine"
+	"github.com/openbase/openbase/internal/function"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/provision"
 	"github.com/openbase/openbase/internal/secrets"
 	"github.com/openbase/openbase/internal/server"
+	"github.com/openbase/openbase/internal/triggers"
 	"github.com/openbase/openbase/migrations"
 )
 
@@ -81,6 +83,26 @@ func run(log *slog.Logger) error {
 		Secrets:        secretsProv,
 		AllowedOrigins: cfg.AllowedOrigins,
 	}
+
+	// Trigger runtime (PHASES.md Phase 4): wires project triggers onto their DB
+	// adapter and dispatches change events to webhooks or sandboxed functions.
+	trigSvc := triggers.NewService(
+		store,
+		&engine.TriggerConnector{Factory: engine.NewFactory()},
+		&triggers.Dispatcher{
+			Store: store,
+			Log:   log,
+			Action: &triggers.DispatchGroup{
+				Actions: []triggers.Action{
+					&triggers.EndpointAction{Log: log},
+					&triggers.FunctionAction{Store: store, Runner: function.New(), Log: log},
+				},
+			},
+		},
+		log,
+	)
+	svc.TriggerService = trigSvc
+	defer trigSvc.Stop()
 
 	// Provisioning (ARCHITECTURE.md §2.7): a Compose-backed provisioner that
 	// creates dedicated per-project Postgres containers. Off unless Docker is

@@ -402,6 +402,159 @@ func (s *Postgres) RevokeAPIKey(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---- Triggers ----
+
+func (s *Postgres) CreateTrigger(ctx context.Context, t *Trigger) error {
+	if t.ID == "" {
+		t.ID = newID()
+	}
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = newTime()
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO triggers (id, project_id, name, collection, event, action_type, action_target, enabled, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		t.ID, t.ProjectID, t.Name, t.Collection, string(t.Event),
+		string(t.ActionType), t.ActionTarget, t.Enabled, t.CreatedAt)
+	return mapError(err)
+}
+
+func (s *Postgres) GetTrigger(ctx context.Context, projectID, id string) (*Trigger, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, project_id, name, collection, event, action_type, action_target, enabled, created_at
+		FROM triggers WHERE id = $1 AND project_id = $2`, id, projectID)
+	var t Trigger
+	var ev, at string
+	err := row.Scan(&t.ID, &t.ProjectID, &t.Name, &t.Collection, &ev, &at, &t.ActionTarget, &t.Enabled, &t.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.Event = TriggerEvent(ev)
+	t.ActionType = TriggerActionType(at)
+	return &t, nil
+}
+
+func (s *Postgres) ListTriggers(ctx context.Context, projectID string) ([]Trigger, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, project_id, name, collection, event, action_type, action_target, enabled, created_at
+		FROM triggers WHERE project_id = $1 ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Trigger
+	for rows.Next() {
+		var t Trigger
+		var ev, at string
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.Name, &t.Collection, &ev, &at, &t.ActionTarget, &t.Enabled, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		t.Event = TriggerEvent(ev)
+		t.ActionType = TriggerActionType(at)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Postgres) UpdateTrigger(ctx context.Context, t *Trigger) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE triggers SET name=$3, collection=$4, event=$5, action_type=$6, action_target=$7, enabled=$8
+		WHERE id=$1 AND project_id=$2`,
+		t.ID, t.ProjectID, t.Name, t.Collection, string(t.Event),
+		string(t.ActionType), t.ActionTarget, t.Enabled)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) DeleteTrigger(ctx context.Context, projectID, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM triggers WHERE id=$1 AND project_id=$2`, id, projectID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ---- Functions ----
+
+func (s *Postgres) CreateFunction(ctx context.Context, f *Function) error {
+	if f.ID == "" {
+		f.ID = newID()
+	}
+	if f.CreatedAt.IsZero() {
+		f.CreatedAt = newTime()
+	}
+	if f.Source == "" {
+		f.Source = "// your handler here\nexports.handler = async (event) => { return { received: event } };"
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO functions (id, project_id, name, runtime, source_ref, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6)`,
+		f.ID, f.ProjectID, f.Name, string(f.Runtime), f.Source, f.CreatedAt)
+	return mapError(err)
+}
+
+func (s *Postgres) GetFunction(ctx context.Context, projectID, id string) (*Function, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, project_id, name, runtime, source_ref, created_at
+		FROM functions WHERE id = $1 AND project_id = $2`, id, projectID)
+	var f Function
+	var rt string
+	err := row.Scan(&f.ID, &f.ProjectID, &f.Name, &rt, &f.Source, &f.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	f.Runtime = FunctionRuntime(rt)
+	return &f, nil
+}
+
+func (s *Postgres) ListFunctions(ctx context.Context, projectID string) ([]Function, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, project_id, name, runtime, source_ref, created_at
+		FROM functions WHERE project_id = $1 ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Function
+	for rows.Next() {
+		var f Function
+		var rt string
+		if err := rows.Scan(&f.ID, &f.ProjectID, &f.Name, &rt, &f.Source, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		f.Runtime = FunctionRuntime(rt)
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *Postgres) DeleteFunction(ctx context.Context, projectID, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM functions WHERE id=$1 AND project_id=$2`, id, projectID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // mapError translates driver errors into package-level sentinels, keeping the
 // HTTP layer independent of Postgres specifics.
 func mapError(err error) error {

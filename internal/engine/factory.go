@@ -68,6 +68,29 @@ func (c *Conn) Capabilities() adapter.CapabilitySet {
 	return c.Adapter.Capabilities()
 }
 
+// RegisterTrigger forwards to the underlying adapter.
+func (c *Conn) RegisterTrigger(ctx context.Context, t adapter.TriggerDefinition) error {
+	return c.Adapter.RegisterTrigger(ctx, t)
+}
+
+// RemoveTriggerOn forwards to the underlying adapter.
+func (c *Conn) RemoveTriggerOn(ctx context.Context, collection, triggerID string) error {
+	// Adapters expose RemoveTriggerOn directly (Postgres); others expose only
+	// the generic RemoveTrigger, which may be unimplemented — surface honestly.
+	type rma interface {
+		RemoveTriggerOn(ctx context.Context, collection, triggerID string) error
+	}
+	if a, ok := c.Adapter.(rma); ok {
+		return a.RemoveTriggerOn(ctx, collection, triggerID)
+	}
+	return c.Adapter.RemoveTrigger(ctx, triggerID)
+}
+
+// SubscribeToChanges forwards to the underlying adapter.
+func (c *Conn) SubscribeToChanges(ctx context.Context, collection string, handler adapter.ChangeHandler) (adapter.Subscription, error) {
+	return c.Adapter.SubscribeToChanges(ctx, collection, handler)
+}
+
 // Factory resolves and connects adapters, mirroring the server AdapterFactory
 // contract while returning the full DatabaseAdapter for feature use.
 type Factory struct{}

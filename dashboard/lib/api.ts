@@ -5,12 +5,16 @@ import type {
   AuthResponse,
   Connection,
   FullSchema,
+  Function,
   Organization,
   Project,
   QueryRowsRequest,
   ResultSet,
   SchemaInfo,
   TestConnectionResult,
+  Trigger,
+  TriggerActionType,
+  TriggerEvent,
   User,
 } from "./types";
 
@@ -146,4 +150,41 @@ export const api = {
     ),
   revokeAPIKey: (token: string, projectId: string, keyID: string) =>
     request<{ revoked: boolean }>("DELETE", `/v1/projects/${projectId}/api-keys/${keyID}`, undefined, token),
+
+  // Triggers.
+  listTriggers: (token: string, projectId: string) =>
+    request<Trigger[]>("GET", `/v1/projects/${projectId}/triggers`, undefined, token),
+  createTrigger: (
+    token: string,
+    projectId: string,
+    body: {
+      name: string;
+      collection: string;
+      event: TriggerEvent;
+      action_type: TriggerActionType;
+      action_target: string;
+      enabled?: boolean;
+    }
+  ) => request<Trigger>("POST", `/v1/projects/${projectId}/triggers`, body, token),
+  updateTrigger: (
+    token: string,
+    projectId: string,
+    triggerId: string,
+    body: Partial<Omit<Trigger, "id" | "project_id" | "created_at">>
+  ) => request<Trigger>("PUT", `/v1/projects/${projectId}/triggers/${triggerId}`, body, token),
+  deleteTrigger: (token: string, projectId: string, triggerId: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/triggers/${triggerId}`, undefined, token),
+
+  // Functions.
+  listFunctions: (token: string, projectId: string) =>
+    request<Function[]>("GET", `/v1/projects/${projectId}/functions`, undefined, token),
+  createFunction: (
+    token: string,
+    projectId: string,
+    body: { name: string; runtime: Function["runtime"]; source: string }
+  ) => request<Function>("POST", `/v1/projects/${projectId}/functions`, body, token),
+  getFunction: (token: string, projectId: string, fnId: string) =>
+    request<Function>("GET", `/v1/projects/${projectId}/functions/${fnId}`, undefined, token),
+  deleteFunction: (token: string, projectId: string, fnId: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/functions/${fnId}`, undefined, token),
 };

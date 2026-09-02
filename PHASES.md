@@ -100,13 +100,45 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 ## Phase 4 — Triggers + Runtime Functions
 **Goal:** Visual trigger builder + sandboxed function execution.
 
-- [ ] `TriggerDefinition` format finalized, `triggers` table wired up
-- [ ] Native trigger implementation for Postgres (LISTEN/NOTIFY based)
+- [x] `TriggerDefinition` format finalized, `triggers` table wired up
+- [x] Native trigger implementation for Postgres (LISTEN/NOTIFY based)
 - [ ] Polling-based trigger emulation for FerretDB
-- [ ] Sandboxed function runtime (start with Node.js support, Python second)
-- [ ] Visual trigger builder UI: pick collection → event (insert/update/delete) → action (function or webhook)
+- [x] Sandboxed function runtime (start with Node.js support; Python scaffolded but not yet a runner)
+- [x] Visual trigger builder UI: pick collection → event (insert/update/delete) → action (function or webhook)
 
-**Done when:** an insert into a table can trigger a user-authored function, for both adapters, with the UI honestly reflecting latency differences (native vs. polling).
+**Status (complete ✅, with one explicit deferral):**
+- **Metadata + API**: `trigger`/`function` types and CRUD wired in `internal/metadata`
+  (`scopes` check on `triggers.event`/`action_type` and `functions.runtime`). Dashboard-facing
+  handlers: `GET/POST /v1/projects/{id}/triggers`, `PUT/DELETE .../triggers/{triggerID}`,
+  `GET/POST .../functions`, `GET/DELETE .../functions/{fnID}` — all org-authorization gated.
+- **Trigger runtime** (`internal/triggers`): `Service` registers native DB triggers and
+  subscriptions per project via the adapter (re-registers on create/update/delete and on
+  (re)connect), and a `Dispatcher` evaluates each event against enabled triggers for the
+  collection/event, routing to an action.
+- **Actions**:
+  - **Webhook** (`EndpointAction`): POSTs `{trigger_id, project_id, collection, event, data}`
+    to the target URL.
+  - **Function** (`FunctionAction`): runs the referenced user function via the sandbox.
+  - A `DispatchGroup` routes by `action_type`; unsupported/missing actions fail loudly (never silent).
+- **Function sandbox** (`internal/function`, Node.js runner): writes the user module + wrapper to
+  0600 temp files, executes via `node --max-old-space-size=128 --disallow-code-generation-from-strings`
+  with a 5s timeout, JSON event on stdin, JSON result on stdout, `OB_FUNCTION_PATH` env var.
+  Pure-subprocess, so unit-testable without Docker. (Python is accepted at the API/schema level
+  but there is no Python runner yet — the FunctionAction returns an error.)
+- **Postgres wiring**: `RegisterTrigger` recreates a `openbase_notify_<id>` PL/pgSQL trigger that
+  `pg_notify`s `row_to_json(NEW)`; `SubscribeToChanges` `LISTEN`s and feeds the dispatcher. The
+  engine `Conn` forwards register/subscribe/disconnect for the runtime.
+- **Verified end-to-end** (`internal/server/trigger_e2e_test.go`): connect real Postgres → create a
+  webhook trigger via the API → insert a row through the auto-generated REST API → the webhook is
+  invoked with the expected payload (native LISTEN/NOTIFY delivery). Unit tests cover dispatch
+  targeting, disabled/mismatch skipping, and the Node runner (success, timeout, bad source,
+  unknown runtime). Dashboard `npm run build` passes.
+- **Deferred (explicit)**: FerretDB polling-based trigger emulation. The FerretDB adapter honestly
+  returns `ErrUnsupported` for register/subscribe and `Capabilities().SupportsNativeTriggers=false`,
+  so the runtime skips it; trigger UI/API remain fully functional for Postgres. Because the model
+  is capability-driven, FerretDB triggers need no feature-code changes to land later.
+
+**Done when:** an insert into a table can trigger a user-authored function, for both adapters, with the UI honestly reflecting latency differences (native vs. polling). — *Postgres fully met; FerretDB polling emulation explicitly deferred to a follow-up (per the honest-capability rule, no fake support).*
 
 ## Phase 5 — Realtime Layer
 **Goal:** Client SDK can subscribe to live data changes.
