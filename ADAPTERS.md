@@ -60,7 +60,7 @@ The dashboard and API layer **query this before rendering a feature**. Example: 
 | Engine | Joins | Foreign Keys | Native Triggers | Realtime | Transactions | Vector Search |
 |---|---|---|---|---|---|---|
 | PostgreSQL | Yes | Yes | Yes | Native (logical replication) | Yes | Yes (pgvector) |
-| MySQL | Yes | Yes | Yes | Polling / binlog-based | Yes | No |
+| MySQL ³ | Yes | Yes | `false` until delivery wired | `none` (delivery not wired) | Yes | No |
 | FerretDB (on Postgres) ¹ | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
 | Valkey ² | No | No | No | `none` (keyspace notifs not implemented) | No | No |
 | ArcadeDB (graph) | N/A (graph traversal instead) | N/A | Limited | Polling | Yes | Yes |
@@ -73,6 +73,12 @@ flag flips to `polling` and this row becomes accurate in code, not just intent.
 ² The shipped Valkey adapter uses Redis sets of JSON docs as collections. It currently returns
 `Realtime:none` — a Redis keyspace-notifications change stream is a candidate future tier, but has not
 been implemented, so the honest value is `none`, not the `pub/sub` intent above.
+
+³ The shipped MySQL adapter (CRUD/schema/joins/transactions/full-text all native) does not yet wire the
+platform's trigger/realtime *delivery*. MySQL has native triggers, but without a queue-table + polling
+change-stream tier a created trigger would fire into a void, so the adapter honestly returns
+`SupportsNativeTriggers:false` and `Realtime:none`, and `RegisterTrigger`/`SubscribeToChanges`
+return `ErrUnsupported`. The flags flip when that tier lands.
 
 This table should live in code as the actual `Capabilities()` return values, not just documentation — keep them in sync.
 

@@ -165,11 +165,11 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                 autoComplete="off"
                 value={connString}
                 onChange={(e) => setConnString(e.target.value)}
-                placeholder="postgres://user:pass@host:5432/db, mongodb://user:pass@host:27017/, or redis://host:6379"
+                placeholder="postgres://user:pass@host:5432/db, mysql://user:pass@host:3306/db, mongodb://user:pass@host:27017/, or redis://host:6379"
                 />
               <p className="mt-1 text-xs text-slate-400">
-                The engine is auto-detected from the URL scheme: postgres://, mongodb://,
-                or redis:// (Valkey). Credentials are encrypted at rest (SCHEMA.md §2).
+                The engine is auto-detected from the URL scheme: postgres://, mysql://,
+                mongodb://, or redis:// (Valkey). Credentials are encrypted at rest (SCHEMA.md §2).
               </p>
             </div>
           )}

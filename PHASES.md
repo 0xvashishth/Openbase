@@ -169,7 +169,7 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 - [x] Valkey adapter (key-value; capability-limited UI accordingly) — implemented (`internal/adapter/valkey`): collections modeled as Redis sets of JSON docs; CRUD, schema sampling, collection listing; honest capabilities (no FKs/joins/triggers/realtime). Auto-detected from `redis://`/`valkey://`/`rediss://`
 - [ ] ArcadeDB adapter (graph; relationship UI adapted for graph traversal rather than FK lines)
 - [ ] Qdrant/Chroma adapter (vector; UI for embedding/similarity search rather than table rows)
-- [ ] MySQL adapter (second relational engine)
+- [x] MySQL adapter (second relational engine) — implemented (`internal/adapter/mysql`): full CRUD, schema introspection, relationships/joins, transactions, full-text; auto-detected from `mysql://`. Honest gating: the platform's trigger/realtime *delivery* (queue-table + polling change stream) is not yet wired, so `SupportsNativeTriggers`/`SupportsRealtime` are `false` and `RegisterTrigger`/`SubscribeToChanges` return `ErrUnsupported` (no silent no-op). Tested with `go-sqlmock` (no live MySQL / no Docker); Docker-backed E2E deferred to a follow-up.
 - [x] Load testing, security audit pass — function sandbox hardened: process-group isolation (descendant processes killed on timeout, no orphans) + bounded stdout/stderr (`limitedBuffer`) so a runaway function can't exhaust host memory
 - [ ] Documentation for third-party adapter contributions (formalize the checklist in `ADAPTERS.md` §4)
 

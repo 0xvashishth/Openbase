@@ -9,6 +9,7 @@ import (
 
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/adapter/ferretdb"
+	"github.com/openbase/openbase/internal/adapter/mysql"
 	"github.com/openbase/openbase/internal/adapter/postgres"
 	"github.com/openbase/openbase/internal/adapter/valkey"
 	"github.com/openbase/openbase/internal/metadata"
@@ -119,6 +120,8 @@ func (f *Factory) ConnectForEngine(ctx context.Context, engine adapter.Engine, c
 		a = ferretdb.New()
 	case adapter.EngineValkey:
 		a = valkey.New()
+	case adapter.EngineMySQL:
+		a = mysql.New()
 	default:
 		return nil, fmt.Errorf("%w: engine %q not yet implemented", adapter.ErrUnsupported, engine)
 	}

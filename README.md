@@ -43,7 +43,7 @@ All chosen for **permissive, redistribution-safe licenses** — no SSPL, no BSL 
 | Category | Engine | License | Adapter |
 |---|---|---|---|
 | Relational | PostgreSQL | PostgreSQL License (BSD-style) | ✅ implemented |
-| Relational | MySQL Community | GPLv2 | planned |
+| Relational | MySQL Community | GPLv2 | ✅ implemented |
 | Document (Mongo-compatible) | FerretDB (on Postgres) | Apache 2.0 | ✅ implemented |
 | Key-Value / Cache | Valkey (Redis fork) | BSD | ✅ implemented |
 | Graph | ArcadeDB | Apache 2.0 | planned |
@@ -60,7 +60,7 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 5. **Phase 4** — Triggers + runtime functions (complete)
 6. **Phase 5** — Realtime layer (complete)
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1) (complete)
-8. **Phase 7** — Remaining adapters (Valkey ✅, graph, vector, MySQL) + polish (in progress — Valkey adapter + function-sandbox hardening done)
+8. **Phase 7** — Remaining adapters (Valkey ✅, MySQL ✅, graph, vector) + polish (in progress — Valkey, MySQL, function-sandbox hardening done)
 
 > **Status:** Phases 0–6 are **complete** (API + metadata store + auth + encryption + Next.js
 > dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
@@ -71,7 +71,9 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 > live-updating-list SDK/demo; and BYODB hardening — multi-key envelope encryption with key
 > rotation (`encryption_key_id`-keyed decrypt) plus honest capability gating for triggers/realtime).
 > Phase 7 progress: a Valkey key-value adapter (`redis://` auto-detect, collections as JSON sets,
-> honest capabilities — no FKs/joins/triggers/realtime, all `ErrUnsupported`) and a function-sandbox
+> honest capabilities — no FKs/joins/triggers/realtime, all `ErrUnsupported`); a MySQL adapter
+> (`mysql://` auto-detect, native CRUD/schema/joins/transactions/full-text, with trigger/realtime
+> delivery honestly gated off until a queue-table + polling tier lands); and a function-sandbox
 > security audit (process-group isolation so descendant processes die on timeout, plus bounded
 > stdout/stderr capture so a runaway function can't exhaust host memory).
 > External clients can hit their project's generated REST endpoints with an

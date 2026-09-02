@@ -65,6 +65,11 @@ The **Valkey adapter** is the one deliberate exception: its tests use
 [`miniredis`](https://github.com/alicebob/miniredis) (an in-process Redis-protocol server),
 so the key-value adapter is fully covered even without a Docker daemon or an external Redis.
 
+The **MySQL adapter** is covered at the logic/SQL-generation level with
+[`go-sqlmock`](https://github.com/DATA-DOG/go-sqlmock) (verifies the exact SQL, placeholders and
+identifier validation the adapter emits) — this needs no live MySQL and no Docker. Live
+integration testing against a real MySQL/MariaDB remains a documented follow-up.
+
 ```bash
 go test ./...     # full suite (provisioning tests need the Docker daemon and skip if absent)
 make test-short   # -short variant
