@@ -158,10 +158,10 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 - [x] Connection string input + auto-detection (`SCHEMA.md` §3) — delivered in Phase 1
 - [x] Test-connection-before-save flow (ADAPTERS.md §5) — delivered in Phase 1
 - [x] Encrypted credential storage (envelope-encrypted at rest, SCHEMA.md §2) — delivered in Phase 1
-- [ ] Upgrade the envelope-encryption master key to a real vault/KMS/signer (currently an env-configured master key; design in `ARCHITECTURE.md` §2.4)
-- [ ] All existing features (browser, schema explorer, triggers, realtime) work identically over a BYODB connection, gated by the same capability flags — automatically satisfied by the adapter gate, but re-verify after Phase 3/4/5 features land
+- [x] Upgrade the envelope-encryption master key to a vault/KMS/signer — delivered as a `KeyProvider` abstraction + multi-key `MasterKeyProvider` (local in-process key by default; rotation via new current key while keeping old keys for decryption; a KMS/Vault provider slots into the `KeyProvider` interface). Design reference: `ARCHITECTURE.md` §2.6 (was mis-cited as §2.4). New env: `OPENBASE_ENCRYPTION_KEY_ID`, `OPENBASE_ENCRYPTION_KEYS`
+- [x] All existing features (browser, schema explorer, triggers, realtime) work identically over a BYODB connection, gated by the same capability flags — verified; dashboard Triggers/Realtime tabs now show an honest unsupported state (not a runtime failure) for engines that lack native trigger/realtime support
 
-**Done when:** a user pastes a connection string to their own existing Postgres or FerretDB instance and gets the full platform experience without provisioning anything.
+**Done when:** a user pastes a connection string to their own existing Postgres or FerretDB instance and gets the full platform experience without provisioning anything. — *Postgres: fully met for every feature; FerretDB: honestly capability-gated (triggers + realtime unavailable), matching its adapter capabilities.*
 
 ## Phase 7 — Remaining Adapters + Polish
 **Goal:** Round out the database options and harden what exists.

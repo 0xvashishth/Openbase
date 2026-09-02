@@ -37,6 +37,8 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
   const [engine, setEngine] = useState<string | null>(null);
+  const [supportsTriggers, setSupportsTriggers] = useState(false);
+  const [supportsRealtime, setSupportsRealtime] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeTab: TabKey = pathname.endsWith("/connection")
@@ -68,6 +70,17 @@ export default function ProjectDetailPage() {
       .then((c) => {
         setHasConnection(c.status === "connected");
         setEngine(c.engine);
+        if (c.status === "connected") {
+          api
+            .getFullSchema(token, projectId)
+            .then((schema) => {
+              setSupportsTriggers(schema.capabilities.supports_native_triggers);
+              setSupportsRealtime(schema.capabilities.supports_realtime === "native");
+            })
+            .catch(() => {
+              // capabilities are a best-effort hint; leave flags false
+            });
+        }
       })
       .catch(() => {
         setHasConnection(false);
@@ -186,7 +199,14 @@ export default function ProjectDetailPage() {
         {activeTab === "triggers" && (
           <>
             {hasConnection ? (
-              <TriggersPanel projectId={projectId} />
+              supportsTriggers ? (
+                <TriggersPanel projectId={projectId} />
+              ) : (
+                <EmptyState
+                  title="Native triggers not supported"
+                  hint="The connected engine does not support native triggers. Only engines that expose native trigger/change capture expose the trigger builder."
+                />
+              )
             ) : (
               <EmptyState
                 title="Connect a database first"
@@ -199,7 +219,14 @@ export default function ProjectDetailPage() {
         {activeTab === "realtime" && (
           <>
             {hasConnection ? (
-              <RealtimeDemo projectId={projectId} />
+              supportsRealtime ? (
+                <RealtimeDemo projectId={projectId} />
+              ) : (
+                <EmptyState
+                  title="Native realtime not supported"
+                  hint="The connected engine does not expose a native change stream. Live WebSocket updates are only available for engines that advertise native realtime support."
+                />
+              )
             ) : (
               <EmptyState
                 title="Connect a database first"

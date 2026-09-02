@@ -66,7 +66,7 @@ func run(log *slog.Logger) error {
 	// rest of the API still works.
 	var secretsProv server.SecretsProvider
 	if cfg.EncryptionKey != "" {
-		p, err := secrets.New(cfg.EncryptionKey, "openbase-master-key-v1")
+		p, err := secrets.NewRotating(cfg.EncryptionKey, cfg.EncryptionKeyID, cfg.EncryptionKeys)
 		if err != nil {
 			return err
 		}

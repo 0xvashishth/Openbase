@@ -49,7 +49,9 @@ All config is env-driven (`internal/config`). The most important:
 | `OPENBASE_ADDR` | API listen address | `:8080` |
 | `OPENBASE_DATABASE_URL` | Platform metadata Postgres | `postgres://openbase:openbase@localhost:5432/openbase?sslmode=disable` |
 | `OPENBASE_JWT_SECRET` | JWT signing secret | dev default (reject in production) |
-| `OPENBASE_ENCRYPTION_KEY` | Envelope-encryption master key for connection secrets | empty ⇒ secrets disabled |
+| `OPENBASE_ENCRYPTION_KEY` | Envelope-encryption master key (current key) for connection secrets | empty ⇒ secrets disabled |
+| `OPENBASE_ENCRYPTION_KEY_ID` | Name/id of the current encryption key, stamped on new rows | `openbase-master-key-v1` |
+| `OPENBASE_ENCRYPTION_KEYS` | Key-rotation registry of historical keys, `id=secret,id=secret`, kept decodable | empty |
 | `OPENBASE_ALLOWED_ORIGINS` | CORS allow-list (comma-separated); empty = any origin | empty |
 | `OPENBASE_PROVISIONER_ENABLED` | Enable "provisioned" DB mode (needs a Docker daemon) | `false` |
 | `NEXT_PUBLIC_OPENBASE_API_URL` | Dashboard → API base URL (browser) | `http://localhost:8080` |

@@ -70,6 +70,7 @@ The platform needs its own database to track users, organizations, projects, and
 
 - Store BYODB credentials and provisioned-DB credentials encrypted at rest.
 - Use a dedicated secrets approach (e.g. HashiCorp Vault, or at minimum envelope encryption with a KMS-style key) rather than storing plaintext or simply-encrypted values directly in the metadata Postgres DB.
+- **Implemented as envelope encryption with a pluggable `KeyProvider`** (`internal/crypto/provider.go`): each value is encrypted with a random per-value key wrapped by a master key. A `MasterKeyProvider` registry supports rotation — new writes go under the current key, while previously-used keys (by `id`) stay available for decrypting older rows via the row's recorded `encryption_key_id`. The default provider is an in-process `LocalKey` (operator-configured secret), and a remote KMS/Vault signer would simply implement the same `Wrap`/`Unwrap` interface. Config: `OPENBASE_ENCRYPTION_KEY`, `OPENBASE_ENCRYPTION_KEY_ID`, `OPENBASE_ENCRYPTION_KEYS`.
 
 ### 2.7 Containerization / Deployment
 

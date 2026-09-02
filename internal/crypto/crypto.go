@@ -15,20 +15,31 @@ import (
 	"io"
 )
 
-// Encryptor performs envelope encryption with a 32-byte master key.
+// Encryptor performs envelope encryption: each value is encrypted with a random
+// per-value key wrapped by a KeyProvider's master material. The provider is the
+// unit of key management (see provider.go) — the same encryptor code drives the
+// local in-process key and a future KMS/Vault-backed key.
 type Encryptor struct {
-	master []byte
+	key KeyProvider
 }
 
-// NewEncryptor derives a master key from the operator-provided secret. The
-// secret should have at least 32 bytes of entropy; it is hashed to a fixed
-// AES-256 key.
+// NewEncryptor is a convenience constructor using a local in-process master key
+// derived from masterSecret. Prefer building an explicit KeyProvider when key
+// rotation matters.
 func NewEncryptor(masterSecret string) (*Encryptor, error) {
 	if masterSecret == "" {
 		return nil, errors.New("crypto: empty master secret")
 	}
-	sum := sha256.Sum256([]byte(masterSecret))
-	return &Encryptor{master: sum[:]}, nil
+	return NewKeyedEncryptor(&LocalKey{id: "local", master: mustDeriveMaster(masterSecret)})
+}
+
+// NewKeyedEncryptor returns an Encryptor that wraps per-value keys using the
+// supplied KeyProvider.
+func NewKeyedEncryptor(key KeyProvider) (*Encryptor, error) {
+	if key == nil {
+		return nil, errors.New("crypto: nil key provider")
+	}
+	return &Encryptor{key: key}, nil
 }
 
 // Encrypt envelope-encrypts plaintext. Output layout:
@@ -122,35 +133,17 @@ func (e *Encryptor) Decrypt(data []byte) ([]byte, error) {
 }
 
 func (e *Encryptor) wrap(dek []byte) ([]byte, error) {
-	block, err := aes.NewCipher(e.master)
-	if err != nil {
-		return nil, err
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, aead.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	return aead.Seal(nonce, nonce, dek, nil), nil
+	return e.key.Wrap(dek)
 }
 
 func (e *Encryptor) unwrap(wrapped []byte) ([]byte, error) {
-	block, err := aes.NewCipher(e.master)
-	if err != nil {
-		return nil, err
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonceSize := aead.NonceSize()
-	if len(wrapped) < nonceSize {
-		return nil, errors.New("crypto: truncated wrapped key")
-	}
-	nonce := wrapped[:nonceSize]
-	ct := wrapped[nonceSize:]
-	return aead.Open(nil, nonce, ct, nil)
+	return e.key.Unwrap(wrapped)
+}
+
+// mustDeriveMaster hashes the operator-provided secret to a fixed AES-256 key
+// for a local in-process key. It panics only if derivation produces an
+// aes.NewCipher error, which cannot happen for a SHA-256 digest.
+func mustDeriveMaster(secret string) []byte {
+	sum := sha256.Sum256([]byte(secret))
+	return sum[:]
 }

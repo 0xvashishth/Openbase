@@ -27,6 +27,13 @@ type Config struct {
 	// Secrets. V1 uses an envelope-encryption key configured here; a real
 	// KMS/vault integration is scheduled for a later phase (PHASES.md §6).
 	EncryptionKey string
+	// EncryptionKeyID names the current encryption key stamped on new rows.
+	// Defaults to "openbase-master-key-v1".
+	EncryptionKeyID string
+	// EncryptionKeys is the rotation registry: previously-used key ids mapped
+	// to their secrets, so rows encrypted under a rotated key stay readable.
+	// The current key is always available for writes and is added automatically.
+	EncryptionKeys map[string]string
 
 	// AllowedOrigins for CORS, comma-separated. Empty means allow any origin
 	// (development default).
@@ -49,6 +56,8 @@ func Default() (*Config, error) {
 		JWTAudience:     envOr("OPENBASE_JWT_AUDIENCE", "openbase-dashboard"),
 		TokenTTL:        24 * time.Hour,
 		EncryptionKey:   envOr("OPENBASE_ENCRYPTION_KEY", ""),
+		EncryptionKeyID: envOr("OPENBASE_ENCRYPTION_KEY_ID", "openbase-master-key-v1"),
+		EncryptionKeys:  parseKeyMap(os.Getenv("OPENBASE_ENCRYPTION_KEYS")),
 		AllowedOrigins:  splitCSV(os.Getenv("OPENBASE_ALLOWED_ORIGINS")),
 		ProvisioningEnabled: os.Getenv("OPENBASE_PROVISIONER_ENABLED") == "true",
 	}
@@ -76,6 +85,34 @@ func splitCSV(s string) []string {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+// parseKeyMap parses a rotation registry of the form "id=secret,id=secret".
+// Values are trimmed; malformed entries (no '=') are skipped. An empty input
+// yields nil (no historical keys).
+func parseKeyMap(s string) map[string]string {
+	if s == "" {
+		return nil
+	}
+	out := map[string]string{}
+	for _, pair := range strings.Split(s, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		id := strings.TrimSpace(parts[0])
+		if id != "" {
+			out[id] = parts[1]
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
