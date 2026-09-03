@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -11,88 +11,59 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
-  type OnConnect,
-  type EdgeTypes,
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
-import { Spinner, EmptyState } from "@/components/ui";
-import type { FullSchema, SchemaInfo, Relationship } from "@/lib/types";
+import { EmptyState } from "@/components/ui";
+import { SchemaSkeleton } from "@/components/ui/skeletons";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { normalizeFullSchema } from "@/lib/schema";
+import type { FullSchema, SchemaInfo } from "@/lib/types";
 
-// Colors for table nodes by engine type.
-const TABLE_COLORS = {
-  postgres: { bg: "#eff6ff", border: "#3b82f6", header: "#dbeafe" },
-  ferretdb: { bg: "#fef3c7", border: "#f59e0b", header: "#fde68a" },
-  default:  { bg: "#f8fafc", border: "#94a3b8", header: "#f1f5f9" },
-};
-
-function tableNodeColor(engine: string) {
-  return TABLE_COLORS[engine as keyof typeof TABLE_COLORS] || TABLE_COLORS.default;
-}
-
+/** Monochrome table node: uses theme tokens so light/dark both work. */
 function TableNode({ data }: { data: Record<string, any> }) {
   const schema = data.schema as SchemaInfo;
-  const engine = (data.engine as string) || "default";
-  const colors = tableNodeColor(engine);
-  const pk = schema.columns.find((c) => c.is_primary);
+  const columns = Array.isArray(schema?.columns) ? schema.columns : [];
+  const shown = columns.slice(0, 12);
+  const hidden = columns.length - shown.length;
 
   return (
-    <div
-      style={{
-        background: colors.bg,
-        border: `2px solid ${colors.border}`,
-        borderRadius: 8,
-        minWidth: 180,
-        maxWidth: 260,
-        fontSize: 12,
-        fontFamily: "system-ui, sans-serif",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
-      }}
-    >
-      <div
-        style={{
-          background: colors.header,
-          padding: "6px 10px",
-          borderRadius: "6px 6px 0 0",
-          fontWeight: 600,
-          borderBottom: `1px solid ${colors.border}`,
-          color: "#1e293b",
-        }}
-      >
-        {schema.collection}
+    <div className="min-w-[190px] max-w-[270px] overflow-hidden rounded-lg border-2 border-border bg-card text-xs shadow-sm">
+      <div className="border-b border-border bg-muted px-2.5 py-1.5 font-semibold text-foreground">
+        {schema?.collection ?? "unknown"}
       </div>
-      <div style={{ padding: "4px 0" }}>
-        {schema.columns.map((col) => (
-          <div
-            key={col.name}
-            style={{
-              padding: "2px 10px",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              color: "#475569",
-            }}
-          >
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>
+      <div className="py-1">
+        {shown.map((col) => (
+          <div key={col.name} className="flex items-center gap-1.5 px-2.5 py-0.5 text-muted-foreground">
+            <span className="w-5 text-[10px] font-semibold text-muted-foreground/70">
               {col.is_primary ? "PK" : col.is_unique ? "UQ" : ""}
             </span>
-            <span style={{ fontFamily: "monospace", fontSize: 11 }}>{col.name}</span>
-            <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: "auto" }}>
-              {col.data_type}
-            </span>
+            <span className="truncate font-mono text-[11px] text-foreground">{col.name}</span>
+            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{col.data_type}</span>
           </div>
         ))}
+        {columns.length === 0 && (
+          <p className="px-2.5 py-1 text-[11px] text-muted-foreground">No columns reported.</p>
+        )}
+        {hidden > 0 && (
+          <p className="px-2.5 py-0.5 text-[10px] text-muted-foreground">+{hidden} more…</p>
+        )}
       </div>
     </div>
   );
 }
 
 const nodeTypes: NodeTypes = {
-  tableNode: TableNode as any,
+  tableNode: TableNode as never,
 };
+
+export function layoutGrid(count: number): { perRow: number; xGap: number; yGap: number } {
+  return { perRow: Math.max(1, Math.ceil(Math.sqrt(Math.max(1, count)))), xGap: 300, yGap: 220 };
+}
 
 export function SchemaExplorer({
   projectId,
@@ -104,9 +75,10 @@ export function SchemaExplorer({
   const [schema, setSchema] = useState<FullSchema | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const supportsFK = schema?.capabilities.supports_foreign_keys ?? false;
+  const supportsFK = schema?.capabilities?.supports_foreign_keys ?? false;
 
   useEffect(() => {
     const token = authToken();
@@ -115,69 +87,65 @@ export function SchemaExplorer({
     api
       .getFullSchema(token, projectId)
       .then((s) => {
-        setSchema(s);
+        setSchema(normalizeFullSchema(s));
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load schema"))
       .finally(() => setLoading(false));
   }, [projectId]);
 
+  const collections = useMemo(() => {
+    const all = Array.isArray(schema?.collections) ? schema.collections : [];
+    const q = filter.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter((c) => c.collection.toLowerCase().includes(q));
+  }, [schema, filter]);
+
+  const relationships = useMemo(
+    () => (Array.isArray(schema?.relationships) ? schema.relationships : []),
+    [schema]
+  );
+
   useEffect(() => {
-    if (!schema) return;
-
-    const cols = schema.collections;
-    const rels = schema.relationships;
-
-    // Layout tables in a grid.
-    const cols_per_row = Math.ceil(Math.sqrt(cols.length));
-    const xGap = 300;
-    const yGap = 200;
-
-    const newNodes: Node[] = cols.map((c, i) => ({
+    const { perRow, xGap, yGap } = layoutGrid(collections.length);
+    const newNodes: Node[] = collections.map((c, i) => ({
       id: `table-${c.collection}`,
       type: "tableNode",
-      position: {
-        x: (i % cols_per_row) * xGap,
-        y: Math.floor(i / cols_per_row) * yGap,
-      },
+      position: { x: (i % perRow) * xGap, y: Math.floor(i / perRow) * yGap },
       data: { schema: c, engine },
     }));
-
-    const newEdges: Edge[] = rels.map((r, i) => ({
-      id: `edge-${i}`,
-      source: `table-${r.from_collection}`,
-      target: `table-${r.to_collection}`,
-      sourceHandle: r.from_column,
-      targetHandle: r.to_column,
-      type: "smoothstep",
-      animated: true,
-      style: { stroke: "#3b82f6", strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
-      label: `${r.from_column} → ${r.to_column}`,
-      labelStyle: { fontSize: 10, fill: "#64748b" },
-    }));
-
+    // Only draw edges whose endpoints are visible after filtering.
+    const visible = new Set(collections.map((c) => `table-${c.collection}`));
+    const newEdges: Edge[] = relationships
+      .filter((r) => visible.has(`table-${r.from_collection}`) && visible.has(`table-${r.to_collection}`))
+      .map((r, i) => ({
+        id: `edge-${i}`,
+        source: `table-${r.from_collection}`,
+        target: `table-${r.to_collection}`,
+        type: "smoothstep",
+        animated: true,
+        style: { strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed },
+        label: `${r.from_column} → ${r.to_column}`,
+      }));
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [schema, engine, setNodes, setEdges]);
+  }, [collections, relationships, engine, setNodes, setEdges]);
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading schema…
-      </div>
-    );
+    return <SchemaSkeleton />;
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
         {error}
       </div>
     );
   }
 
-  if (!schema || schema.collections.length === 0) {
+  const total = Array.isArray(schema?.collections) ? schema.collections.length : 0;
+  if (!schema || total === 0) {
     return (
       <EmptyState
         title="No tables found"
@@ -186,33 +154,41 @@ export function SchemaExplorer({
     );
   }
 
-  const hasRelationships = schema.relationships.length > 0;
+  const hasRelationships = relationships.length > 0;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           Schema Explorer
-          {!supportsFK && (
-            <span className="ml-2 text-xs font-normal text-amber-600">
-              (engine has no FK support — document/limited model, no relationship lines)
-            </span>
-          )}
+          <Badge variant="secondary">{total} tables</Badge>
+          {hasRelationships && <Badge variant="muted">{relationships.length} relationships</Badge>}
+          {!supportsFK && <Badge variant="muted">no FK support</Badge>}
         </h3>
-        <span className="text-xs text-slate-500">
-          {schema.collections.length} tables
-          {hasRelationships && ` · ${schema.relationships.length} relationships`}
-        </span>
+        <Input
+          aria-label="Filter tables"
+          placeholder="Filter tables…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="w-52"
+        />
       </div>
 
-      {!hasRelationships && supportsFK && (
-        <p className="text-xs text-slate-400">
-          No foreign key relationships detected. Relationship lines will appear
-          when tables have FK constraints.
+      {!supportsFK && (
+        <p className="text-xs text-muted-foreground">
+          This engine has no foreign-key support — document/limited model, tables render without relationship lines.
         </p>
       )}
+      {!hasRelationships && supportsFK && (
+        <p className="text-xs text-muted-foreground">
+          No foreign key relationships detected. Relationship lines appear when tables have FK constraints.
+        </p>
+      )}
+      {filter.trim() && collections.length === 0 && (
+        <EmptyState title="No tables match" hint={`Nothing matches "${filter.trim()}".`} />
+      )}
 
-      <div style={{ height: 500, borderRadius: 8, border: "1px solid #e2e8f0" }}>
+      <div className="h-[500px] overflow-hidden rounded-lg border border-border bg-background">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -220,6 +196,7 @@ export function SchemaExplorer({
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
           fitView
+          colorMode="system"
           proOptions={{ hideAttribution: true }}
         >
           <Background />

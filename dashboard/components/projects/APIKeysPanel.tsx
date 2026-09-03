@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
-import { Button, EmptyState, ErrorBanner, Input, Label, Spinner, Badge } from "@/components/ui";
+import { Button, EmptyState, ErrorBanner, Input, Label, Badge } from "@/components/ui";
+import { FormSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import type { APIKeyView } from "@/lib/types";
 
 export function APIKeysPanel({ projectId }: { projectId: string }) {
@@ -70,8 +71,9 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading API keys…
+      <div className="space-y-4">
+        <FormSkeleton label="Loading API keys" />
+        <ListSkeleton rows={3} label="Loading API keys" />
       </div>
     );
   }
@@ -79,7 +81,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Create API Key</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Create API Key</h2>
         <form onSubmit={create} className="flex max-w-xl items-end gap-3">
           <div className="flex-1">
             <Label htmlFor="key-name">Name</Label>
@@ -95,11 +97,11 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
           </Button>
         </form>
         {newKey && (
-          <div className="mt-3 max-w-xl rounded-md border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs font-medium text-amber-800">
+          <div className="mt-3 max-w-xl rounded-md border border-warning/30 bg-warning/10 p-3">
+            <p className="text-xs font-medium text-warning">
               Copy this key now — it won't be shown again:
             </p>
-            <code className="mt-1 block break-all rounded bg-amber-100 p-2 text-xs text-amber-900">
+            <code className="mt-1 block break-all rounded bg-warning/15 p-2 text-xs text-warning">
               {newKey}
             </code>
           </div>
@@ -109,7 +111,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Existing Keys</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Existing Keys</h2>
         {keys.length === 0 ? (
           <EmptyState
             title="No API keys"
@@ -120,11 +122,11 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
             {keys.map((k) => (
               <div
                 key={k.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
               >
                 <div>
-                  <span className="text-sm font-medium text-slate-800">{k.name}</span>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                  <span className="text-sm font-medium text-foreground">{k.name}</span>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                     <span>created {new Date(k.created_at).toLocaleDateString()}</span>
                     {k.revoked_at && <Badge tone="red">revoked</Badge>}
                   </div>
@@ -145,31 +147,31 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       </section>
 
       <section className="max-w-xl">
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Using the API</h2>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 space-y-2">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Using the API</h2>
+        <div className="rounded-xl border border-border bg-muted p-4 text-xs text-muted-foreground space-y-2">
           <p>
             <strong>List tables:</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">GET /v1/api/tables</code>
+            <code className="rounded bg-muted px-1">GET /v1/api/tables</code>
           </p>
           <p>
             <strong>Query rows:</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">GET /v1/api/{'{table}'}?limit=10&order_by=id</code>
+            <code className="rounded bg-muted px-1">GET /v1/api/{'{table}'}?limit=10&order_by=id</code>
           </p>
           <p>
             <strong>Insert row:</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">POST /v1/api/{'{table}'}</code> with JSON body
+            <code className="rounded bg-muted px-1">POST /v1/api/{'{table}'}</code> with JSON body
           </p>
           <p>
             <strong>Update row:</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">PUT /v1/api/{'{table}'}/{'{id}'}</code>
+            <code className="rounded bg-muted px-1">PUT /v1/api/{'{table}'}/{'{id}'}</code>
           </p>
           <p>
             <strong>Delete row:</strong>{" "}
-            <code className="rounded bg-slate-100 px-1">DELETE /v1/api/{'{table}'}/{'{id}'}</code>
+            <code className="rounded bg-muted px-1">DELETE /v1/api/{'{table}'}/{'{id}'}</code>
           </p>
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-muted-foreground">
             Authentication:{" "}
-            <code className="rounded bg-slate-100 px-1">Authorization: Bearer ob_...</code>
+            <code className="rounded bg-muted px-1">Authorization: Bearer ob_...</code>
           </p>
         </div>
       </section>

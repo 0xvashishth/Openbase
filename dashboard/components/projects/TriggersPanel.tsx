@@ -10,8 +10,8 @@ import {
   ErrorBanner,
   Input,
   Label,
-  Spinner,
 } from "@/components/ui";
+import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import type { Function, Trigger, TriggerActionType, TriggerEvent } from "@/lib/types";
 
 const EVENTS: { value: TriggerEvent; label: string }[] = [
@@ -130,17 +130,13 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
     t.action_type === "function" ? `→ ${t.action_target}` : t.action_target;
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading triggers…
-      </div>
-    );
+    return <ToolPageSkeleton label="Loading triggers" />;
   }
 
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">New Trigger</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">New Trigger</h2>
         <form onSubmit={create} className="max-w-3xl space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -159,7 +155,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                   id="trig-collection"
                   value={collection}
                   onChange={(e) => setCollection(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">Select a table…</option>
                   {collections.map((c) => (
@@ -196,10 +192,11 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                   key={ev.value}
                   type="button"
                   onClick={() => setEvent(ev.value)}
-                  className={`rounded-md px-3 py-2 text-sm font-medium ${
+                  aria-pressed={event === ev.value}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     event === ev.value
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
                   {ev.label}
@@ -215,10 +212,11 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={() => setActionType("function")}
-                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${
+                  aria-pressed={actionType === "function"}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     actionType === "function"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
                   Function
@@ -226,10 +224,11 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={() => setActionType("webhook")}
-                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${
+                  aria-pressed={actionType === "webhook"}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     actionType === "webhook"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
                   Webhook
@@ -245,7 +244,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                 <select
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">Select a function…</option>
                   {functions.map((f) => (
@@ -267,7 +266,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Triggers</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Triggers</h2>
         {triggers.length === 0 ? (
           <EmptyState
             title="No triggers yet"
@@ -278,19 +277,19 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
             {triggers.map((t) => (
               <div
                 key={t.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-800">{t.name}</span>
+                    <span className="text-sm font-medium text-foreground">{t.name}</span>
                     {t.enabled ? <Badge tone="green">enabled</Badge> : <Badge tone="slate">disabled</Badge>}
                   </div>
-                  <div className="mt-0.5 text-xs text-slate-500">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     when{" "}
-                    <span className="font-medium text-slate-700">{t.event}</span> on{" "}
-                    <span className="font-medium text-slate-700">{t.collection}</span>{" "}
+                    <span className="font-medium text-muted-foreground">{t.event}</span> on{" "}
+                    <span className="font-medium text-muted-foreground">{t.collection}</span>{" "}
                     {t.action_type === "function" ? "run" : "call"}{" "}
-                    <span className="font-mono text-slate-600">{targetLabel(t)}</span>
+                    <span className="font-mono text-muted-foreground">{targetLabel(t)}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

@@ -1,0 +1,267 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import * as React from "react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { api } from "@/lib/api";
+import { authToken } from "@/components/AuthProvider";
+import { parseRoute } from "./nav";
+import { PlatformSidebar } from "./PlatformSidebar";
+import { OrgSidebar } from "./OrgSidebar";
+import { ProjectSidebar } from "./ProjectSidebar";
+import { Topbar } from "./Topbar";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { ProjectProvider, useProject } from "@/lib/project-context";
+import { cn } from "@/lib/utils";
+
+/**
+ * Thin top progress bar shown briefly after every route change so sidebar /
+ * button clicks feel interactive while the new page's skeletons load.
+ */
+function RouteProgress({ currentPath }: { currentPath: string }) {
+  const [visible, setVisible] = React.useState(false);
+  const first = React.useRef(true);
+  React.useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), 600);
+    return () => clearTimeout(t);
+  }, [currentPath]);
+  if (!visible) return null;
+  return (
+    <div role="status" aria-label="Loading new page" className="h-0.5 w-full overflow-hidden bg-muted">
+      <div className="h-full w-1/3 animate-[progress-slide_0.6s_ease-in-out_infinite] bg-primary" />
+      <span className="sr-only">Loading new page…</span>
+    </div>
+  );
+}
+
+function ProjectSidebarConnected({ currentPath }: { currentPath: string }) {
+  const { orgId, projectId, project, engine, hasConnection, supportsTriggers, supportsRealtime, loading } =
+    useProject();
+  return (
+    <ProjectSidebar
+      orgId={orgId}
+      projectId={projectId}
+      projectName={project?.name}
+      engine={engine}
+      connected={hasConnection}
+      hasConnection={loading ? undefined : hasConnection}
+      supportsTriggers={loading ? undefined : supportsTriggers}
+      supportsRealtime={loading ? undefined : supportsRealtime}
+      currentPath={currentPath}
+      loading={loading && !project}
+    />
+  );
+}
+
+/**
+ * Single ProjectProvider wraps BOTH the sidebar and the page content,
+ * so tool pages can call useProject() with zero extra fetches.
+ */
+function ProjectTopbar({ orgName, orgLoading }: { orgName?: string; orgLoading?: boolean }) {
+  const { project, loading } = useProject();
+  return <Topbar orgName={orgName} orgLoading={orgLoading} projectName={project?.name} projectLoading={loading && !project} />;
+}
+
+function ProjectShell({
+  currentPath,
+  children,
+  orgName,
+  orgLoading,
+}: {
+  currentPath: string;
+  children: React.ReactNode;
+  orgName?: string;
+  orgLoading?: boolean;
+}) {
+  const route = parseRoute(currentPath);
+  if (route.scope !== "project" || !route.orgId || !route.projectId) return <>{children}</>;
+  return (
+    <ProjectProvider orgId={route.orgId} projectId={route.projectId}>
+      <ProjectChrome currentPath={currentPath} orgName={orgName} orgLoading={orgLoading}>
+        {children}
+      </ProjectChrome>
+    </ProjectProvider>
+  );
+}
+
+function ProjectChrome({
+  currentPath,
+  children,
+  orgName,
+  orgLoading,
+}: {
+  currentPath: string;
+  children: React.ReactNode;
+  orgName?: string;
+  orgLoading?: boolean;
+}) {
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(false);
+  React.useEffect(() => setMobileOpen(false), [currentPath]);
+  const sidebar = <ProjectSidebarConnected currentPath={currentPath} />;
+  return (
+    <div className="flex h-full flex-col">
+      <RouteProgress currentPath={currentPath} />
+      <ProjectTopbar orgName={orgName} orgLoading={orgLoading} />
+      <div className="flex min-h-0 flex-1">
+        <aside
+          className={cn(
+            "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
+            collapsed ? "w-14" : "w-60"
+          )}
+        >
+          <div className="flex-1 overflow-hidden">{collapsed ? null : sidebar}</div>
+          <div className="border-t border-border p-2">
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
+        </aside>
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="w-72 p-0 md:hidden">
+            {sidebar}
+          </SheetContent>
+        </Sheet>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="border-b border-border p-2 md:hidden">
+            <Button variant="ghost" size="sm" onClick={() => setMobileOpen(true)}>
+              <Menu className="h-4 w-4" /> Menu
+            </Button>
+          </div>
+          <main className="flex-1 overflow-y-auto bg-muted/30">{children}</main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShellChrome({
+  currentPath,
+  sidebar,
+  orgName,
+  orgLoading,
+  projectName,
+  projectLoading,
+  children,
+}: {
+  currentPath: string;
+  sidebar: React.ReactNode;
+  orgName?: string;
+  orgLoading?: boolean;
+  projectName?: string;
+  projectLoading?: boolean;
+  children: React.ReactNode;
+}) {
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(false);
+
+  React.useEffect(() => setMobileOpen(false), [currentPath]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <RouteProgress currentPath={currentPath} />
+      <Topbar orgName={orgName} orgLoading={orgLoading} projectName={projectName} projectLoading={projectLoading} />
+      <div className="flex min-h-0 flex-1">
+        <aside
+          className={cn(
+            "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
+            collapsed ? "w-14" : "w-60"
+          )}
+        >
+          <div className="flex-1 overflow-hidden">{collapsed ? null : sidebar}</div>
+          <div className="border-t border-border p-2">
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
+        </aside>
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="w-72 p-0 md:hidden">
+            {sidebar}
+          </SheetContent>
+        </Sheet>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="border-b border-border p-2 md:hidden">
+            <Button variant="ghost" size="sm" onClick={() => setMobileOpen(true)}>
+              <Menu className="h-4 w-4" /> Menu
+            </Button>
+          </div>
+          <main className="flex-1 overflow-y-auto bg-muted/30">{children}</main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShellInner({ children, currentPath }: { children: React.ReactNode; currentPath: string }) {
+  const route = parseRoute(currentPath);
+  const [orgName, setOrgName] = React.useState<string | undefined>(undefined);
+  const [orgLoading, setOrgLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const token = authToken();
+    if (!token || !route.orgId) {
+      setOrgName(undefined);
+      setOrgLoading(false);
+      return;
+    }
+    setOrgLoading(true);
+    api
+      .getOrg(token, route.orgId)
+      .then((o) => setOrgName(o.name))
+      .catch(() => setOrgName(undefined))
+      .finally(() => setOrgLoading(false));
+  }, [route.orgId]);
+
+  if (route.scope === "project" && route.orgId && route.projectId) {
+    return (
+      <ProjectShell currentPath={currentPath} orgName={orgName} orgLoading={orgLoading}>
+        {children}
+      </ProjectShell>
+    );
+  }
+  if (route.scope === "org" && route.orgId) {
+    return (
+      <ShellChrome
+        currentPath={currentPath}
+        sidebar={<OrgSidebar orgId={route.orgId} orgName={orgName} loading={orgLoading && !orgName} currentPath={currentPath} />}
+        orgName={orgName}
+        orgLoading={orgLoading && !orgName}
+      >
+        {children}
+      </ShellChrome>
+    );
+  }
+  return (
+    <ShellChrome
+      currentPath={currentPath}
+      sidebar={<PlatformSidebar currentPath={currentPath} />}
+    >
+      {children}
+    </ShellChrome>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() ?? "/";
+  return <ShellInner currentPath={pathname}>{children}</ShellInner>;
+}
+
+/** Test-only export: render a specific path without Next router. */
+export function AppShellForPath({ path, children }: { path: string; children: React.ReactNode }) {
+  return <ShellInner currentPath={path}>{children}</ShellInner>;
+}

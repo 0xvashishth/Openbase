@@ -1,242 +1,95 @@
 "use client";
 
-import { useParams, usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import { authToken } from "@/components/AuthProvider";
-import { ConnectionPanel } from "@/components/projects/ConnectionPanel";
-import { TableBrowser } from "@/components/data/TableBrowser";
-import { SchemaExplorer } from "@/components/schema/SchemaExplorer";
-import { APIKeysPanel } from "@/components/projects/APIKeysPanel";
-import { TriggersPanel } from "@/components/projects/TriggersPanel";
-import { FunctionsPanel } from "@/components/projects/FunctionsPanel";
-import { RealtimeDemo } from "@/components/data/RealtimeDemo";
-import { EmptyState, Spinner } from "@/components/ui";
-import type { Project } from "@/lib/types";
+import Link from "next/link";
+import { Database, KeyRound, Network, Plug, Radio, SquareTerminal, Table2, Zap } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/feedback";
+import { ProjectOverviewSkeleton } from "@/components/ui/skeletons";
+import { ProjectGuard, ProjectHeader } from "@/components/projects/ProjectGuard";
+import { useProject } from "@/lib/project-context";
 
-const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "data", label: "Tables" },
-  { key: "schema", label: "Schema" },
-  { key: "api-keys", label: "API Keys" },
-  { key: "functions", label: "Functions" },
-  { key: "triggers", label: "Triggers" },
-  { key: "realtime", label: "Realtime" },
-  { key: "connection", label: "Connection" },
-] as const;
+function OverviewBody() {
+  const { orgId, projectId, project, engine, hasConnection, loading, error } = useProject();
 
-type TabKey = (typeof TABS)[number]["key"];
-
-export default function ProjectDetailPage() {
-  const params = useParams<{ orgId: string; projectId: string }>();
-  const orgId = params.orgId;
-  const projectId = params.projectId;
-  const pathname = usePathname();
-  const router = useRouter();
-
-  const [project, setProject] = useState<Project | null>(null);
-  const [hasConnection, setHasConnection] = useState<boolean | null>(null);
-  const [engine, setEngine] = useState<string | null>(null);
-  const [supportsTriggers, setSupportsTriggers] = useState(false);
-  const [supportsRealtime, setSupportsRealtime] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const activeTab: TabKey = pathname.endsWith("/connection")
-    ? "connection"
-    : pathname.endsWith("/schema")
-    ? "schema"
-    : pathname.endsWith("/api-keys")
-    ? "api-keys"
-    : pathname.endsWith("/functions")
-    ? "functions"
-    : pathname.endsWith("/triggers")
-    ? "triggers"
-    : pathname.endsWith("/realtime")
-    ? "realtime"
-    : pathname.endsWith("/data")
-    ? "data"
-    : "overview";
-
-  useEffect(() => {
-    const token = authToken();
-    if (!token) return;
-    api.listProjects(token, orgId).then((projects) => {
-      const found = projects.find((p) => p.id === projectId);
-      if (found) setProject(found);
-      else setError("Project not found");
-    });
-    api
-      .getConnection(token, projectId)
-      .then((c) => {
-        setHasConnection(c.status === "connected");
-        setEngine(c.engine);
-        if (c.status === "connected") {
-          api
-            .getFullSchema(token, projectId)
-            .then((schema) => {
-              setSupportsTriggers(schema.capabilities.supports_native_triggers);
-              setSupportsRealtime(schema.capabilities.supports_realtime === "native");
-            })
-            .catch(() => {
-              // capabilities are a best-effort hint; leave flags false
-            });
-        }
-      })
-      .catch(() => {
-        setHasConnection(false);
-        setEngine(null);
-      });
-  }, [orgId, projectId]);
-
-  const go = (tab: TabKey) => {
-    const base = `/orgs/${orgId}/projects/${projectId}`;
-    router.push(tab === "overview" ? base : `${base}/${tab}`);
-  };
-
-  if (error) {
-    return (
-      <div className="px-6 py-8">
-        <p className="text-sm text-red-600">{error}</p>
-      </div>
-    );
+  if (loading) {
+    return <ProjectOverviewSkeleton />;
   }
-  if (!project) {
-    return (
-      <div className="flex items-center gap-2 px-6 py-8 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading project…
-      </div>
-    );
+  if (error || !project) {
+    return <EmptyState title={error ?? "Project not found"} />;
   }
+
+  const base = `/orgs/${orgId}/projects/${projectId}`;
+  const tools = [
+    { href: `${base}/tables`, icon: Table2, title: "Tables", desc: "Browse collections and rows.", locked: !hasConnection },
+    { href: `${base}/schema`, icon: Network, title: "Schema", desc: "Visual tables and relationships.", locked: !hasConnection },
+    { href: `${base}/sql`, icon: SquareTerminal, title: "SQL Editor", desc: "Run queries with highlighting.", locked: !hasConnection },
+    { href: `${base}/api`, icon: KeyRound, title: "API Keys", desc: "Auto-generated REST API access.", locked: false },
+    { href: `${base}/functions`, icon: Zap, title: "Functions", desc: "Serverless event handlers.", locked: !hasConnection },
+    { href: `${base}/triggers`, icon: Database, title: "Triggers", desc: "Data events → functions/webhooks.", locked: !hasConnection },
+    { href: `${base}/realtime`, icon: Radio, title: "Realtime", desc: "Live WebSocket change streams.", locked: !hasConnection },
+  ];
 
   return (
-    <div>
-      <header className="border-b border-slate-200 bg-white px-6 py-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-slate-900">{project.name}</h1>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/20">
-            {project.slug}
-          </span>
-        </div>
-      </header>
-
-      <div className="border-b border-slate-200 bg-white px-6">
-        <nav className="-mb-px flex gap-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => go(tab.key)}
-              className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      <div className="mx-auto max-w-6xl px-6 py-6">
-        {activeTab === "overview" && (
-          <div className="space-y-4">
-            <div className="max-w-3xl rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="text-sm font-semibold text-slate-800">Project ready</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                This project is ready for a database. Connect one on the{" "}
-                <button onClick={() => go("connection")} className="text-brand-600 hover:text-brand-700">
-                  Connection
-                </button>{" "}
-                tab, then browse tables under{" "}
-                <button onClick={() => go("data")} className="text-brand-600 hover:text-brand-700">
-                  Tables
-                </button>
-                , or visualize the schema under{" "}
-                <button onClick={() => go("schema")} className="text-brand-600 hover:text-brand-700">
-                  Schema
-                </button>
-                .
-              </p>
-            </div>
+    <div className="max-w-4xl space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>{project.name}</CardTitle>
+            <Badge variant="secondary">{project.slug}</Badge>
+            {engine && <Badge variant="secondary">{engine}</Badge>}
+            <Badge variant={hasConnection ? "success" : "warning"}>
+              {hasConnection ? "connected" : "not connected"}
+            </Badge>
           </div>
-        )}
-
-        {activeTab === "data" &&
-          (hasConnection ? (
-            <TableBrowser projectId={projectId} />
+          <CardDescription>
+            {hasConnection
+              ? "Database connected. Pick a tool below."
+              : "This project needs a database. Connect one, then browse tables."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!hasConnection ? (
+            <Link href={`${base}/connection`} className={buttonVariants()}>
+              <Plug className="h-4 w-4" aria-hidden /> Connect a database
+            </Link>
           ) : (
-            <EmptyState
-              title="Connect a database first"
-              hint="Head to the Connection tab to attach a database, then come back to browse tables."
-            />
-          ))}
+            <Link href={`${base}/tables`} className={buttonVariants()}>
+              <Table2 className="h-4 w-4" aria-hidden /> Browse tables
+            </Link>
+          )}
+        </CardContent>
+      </Card>
 
-        {activeTab === "schema" &&
-          (hasConnection ? (
-            <SchemaExplorer projectId={projectId} engine={engine ?? "unknown"} />
-          ) : (
-            <EmptyState
-              title="Connect a database first"
-              hint="Head to the Connection tab to attach a database, then come back to visualize the schema."
-            />
-          ))}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {tools.map((t) => (
+          <Link key={t.title} href={t.href} aria-disabled={t.locked || undefined}>
+            <Card className="h-full transition-shadow hover:shadow-md">
+              <CardContent className="p-4 pt-4">
+                <div className="flex items-center gap-2">
+                  <t.icon className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  <p className="text-sm font-semibold text-foreground">{t.title}</p>
+                  {t.locked && <Badge variant="muted">locked</Badge>}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{t.desc}</p>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-        {activeTab === "api-keys" && <APIKeysPanel projectId={projectId} />}
-
-        {activeTab === "functions" && (
-          <>
-            {hasConnection ? (
-              <FunctionsPanel projectId={projectId} />
-            ) : (
-              <EmptyState
-                title="Connect a database first"
-                hint="Functions run in response to database events, so a connected database is required."
-              />
-            )}
-          </>
-        )}
-
-        {activeTab === "triggers" && (
-          <>
-            {hasConnection ? (
-              supportsTriggers ? (
-                <TriggersPanel projectId={projectId} />
-              ) : (
-                <EmptyState
-                  title="Native triggers not supported"
-                  hint="The connected engine does not support native triggers. Only engines that expose native trigger/change capture expose the trigger builder."
-                />
-              )
-            ) : (
-              <EmptyState
-                title="Connect a database first"
-                hint="Triggers fire on database events, so a connected database is required."
-              />
-            )}
-          </>
-        )}
-
-        {activeTab === "realtime" && (
-          <>
-            {hasConnection ? (
-              supportsRealtime ? (
-                <RealtimeDemo projectId={projectId} />
-              ) : (
-                <EmptyState
-                  title="Native realtime not supported"
-                  hint="The connected engine does not expose a native change stream. Live WebSocket updates are only available for engines that advertise native realtime support."
-                />
-              )
-            ) : (
-              <EmptyState
-                title="Connect a database first"
-                hint="Realtime pushes database changes over a WebSocket, so a connected database is required."
-              />
-            )}
-          </>
-        )}
-
-        {activeTab === "connection" && <ConnectionPanel projectId={projectId} />}
+export default function ProjectOverviewPage() {
+  return (
+    <div>
+      <ProjectHeader title="Overview" subtitle="Project status and shortcuts." />
+      <div className="mx-auto max-w-6xl px-6 py-6">
+        <ProjectGuard>
+          <OverviewBody />
+        </ProjectGuard>
       </div>
     </div>
   );

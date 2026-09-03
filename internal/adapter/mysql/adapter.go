@@ -38,6 +38,9 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
+// Compile-time assertion that Adapter supports raw read-only SQL.
+var _ adapter.RawQuerier = (*Adapter)(nil)
+
 // New returns a MySQL adapter with no live connection yet.
 func New() *Adapter {
 	return &Adapter{}
@@ -247,6 +250,10 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 
 	var result adapter.ResultSet
 	result.Columns = cols
+	if result.Columns == nil {
+		result.Columns = []string{}
+	}
+	result.Rows = []map[string]any{}
 	raw := make([]sql.RawBytes, len(cols))
 	scanArgs := make([]any, len(cols))
 	for i := range raw {
@@ -254,6 +261,48 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 	}
 	// Values are scanned as bytes (text protocol); phase values into primitives.
 	for rows.Next() {
+		if err := rows.Scan(scanArgs...); err != nil {
+			return result, err
+		}
+		row := make(map[string]any, len(cols))
+		for i, c := range cols {
+			row[c] = bytesToValue(raw[i])
+		}
+		result.Rows = append(result.Rows, row)
+	}
+	return result, rows.Err()
+}
+
+// ExecRaw executes a read-only raw SQL statement (SELECT/WITH/EXPLAIN).
+// Write-guard validation lives in the server handler; rows are capped at
+// adapter.MaxRawRows.
+func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if a.db == nil {
+		return adapter.ResultSet{}, fmt.Errorf("mysql: not connected")
+	}
+	rows, err := a.db.QueryContext(ctx, query)
+	if err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("mysql: exec raw: %w", err)
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return adapter.ResultSet{}, err
+	}
+	result := adapter.ResultSet{Columns: cols, Rows: []map[string]any{}}
+	if result.Columns == nil {
+		result.Columns = []string{}
+	}
+	raw := make([]sql.RawBytes, len(cols))
+	scanArgs := make([]any, len(cols))
+	for i := range raw {
+		scanArgs[i] = &raw[i]
+	}
+	for rows.Next() {
+		if len(result.Rows) >= adapter.MaxRawRows {
+			break
+		}
 		if err := rows.Scan(scanArgs...); err != nil {
 			return result, err
 		}

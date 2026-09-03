@@ -2,11 +2,15 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { CreateProjectForm } from "@/components/projects/CreateProjectForm";
-import { Button, Spinner } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@/lib/types";
 
 export default function OrgDetailPage() {
@@ -14,7 +18,7 @@ export default function OrgDetailPage() {
   const orgId = params.orgId;
   const [org, setOrg] = useState<Organization | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const token = authToken();
@@ -27,40 +31,44 @@ export default function OrgDetailPage() {
 
   return (
     <div>
-      <header className="border-b border-slate-200 bg-white px-6 py-5">
+      <header className="border-b border-border bg-background px-6 py-5">
         {org ? (
           <>
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-slate-900">{org.name}</h1>
-              <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-600/20">
-                {org.slug}
-              </span>
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">{org.name}</h1>
+              <Badge variant="secondary">{org.slug}</Badge>
             </div>
-            <p className="mt-0.5 text-sm text-slate-500">Projects in this organization.</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Projects in this organization.</p>
           </>
         ) : error ? (
-          <p className="text-sm text-red-600">{error}</p>
+          <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Spinner className="h-4 w-4" /> Loading…
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
           </div>
         )}
       </header>
 
       <div className="mx-auto max-w-5xl px-6 py-6">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-slate-500">Projects</p>
-          <Button onClick={() => setShowCreate((v) => !v)} variant={showCreate ? "secondary" : "primary"}>
-            {showCreate ? "Cancel" : "New project"}
+          <p className="text-sm text-muted-foreground">Projects</p>
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" aria-hidden /> New project
           </Button>
         </div>
 
-        {showCreate && (
-          <div className="mb-6 max-w-md rounded-xl border border-brand-200 bg-brand-50/40 p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Create a project</h2>
-            <CreateProjectForm orgId={orgId} onCreated={() => setShowCreate(false)} />
-          </div>
-        )}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create a project</DialogTitle>
+              <DialogDescription>
+                Projects hold one database connection plus API keys, functions and triggers.
+              </DialogDescription>
+            </DialogHeader>
+            <CreateProjectForm orgId={orgId} onCreated={() => setOpen(false)} />
+          </DialogContent>
+        </Dialog>
 
         <ProjectList orgId={orgId} />
       </div>

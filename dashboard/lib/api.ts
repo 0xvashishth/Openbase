@@ -79,6 +79,11 @@ async function request<T>(
     const message = data?.error ?? `Request failed with status ${res.status}`;
     throw new ApiError(res.status, message);
   }
+
+  if (data === null) {
+    data = [] as any;
+  }
+
   return data as T;
 }
 
@@ -137,6 +142,8 @@ export const api = {
     request<SchemaInfo>(`GET`, `/v1/projects/${projectId}/collections/${collection}`, undefined, token),
   queryRows: (token: string, projectId: string, body: QueryRowsRequest) =>
     request<ResultSet>("POST", `/v1/projects/${projectId}/query`, body, token),
+  execSQL: (token: string, projectId: string, query: string) =>
+    request<ResultSet>("POST", `/v1/projects/${projectId}/sql`, { query }, token),
   getFullSchema: (token: string, projectId: string) =>
     request<FullSchema>("GET", `/v1/projects/${projectId}/schema`, undefined, token),
 

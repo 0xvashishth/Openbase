@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
-import { Badge, Card, EmptyState, Spinner } from "@/components/ui";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/feedback";
+import { CardGridSkeleton } from "@/components/ui/skeletons";
 import type { Organization } from "@/lib/types";
 
 export function OrgList() {
@@ -21,14 +24,12 @@ export function OrgList() {
   }, []);
 
   if (error) {
-    return <p className="text-sm text-red-600">{error}</p>;
+    return (
+      <p role="alert" className="text-sm text-destructive">{error}</p>
+    );
   }
   if (!orgs) {
-    return (
-      <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading organizations…
-      </div>
-    );
+    return <CardGridSkeleton count={6} label="Loading organizations" />;
   }
   if (orgs.length === 0) {
     return <EmptyState title="No organizations yet" hint="Create your first organization to get started." />;
@@ -38,14 +39,16 @@ export function OrgList() {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {orgs.map((org) => (
         <Link key={org.id} href={`/orgs/${org.id}`} className="group">
-          <Card className="p-4 transition-shadow group-hover:shadow-md">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900 group-hover:text-brand-700">{org.name}</h3>
-              <Badge tone="blue">{org.slug}</Badge>
-            </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Created {new Date(org.created_at).toLocaleDateString()}
-            </p>
+          <Card className="transition-shadow group-hover:shadow-md">
+            <CardContent className="p-4 pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="truncate font-semibold text-foreground">{org.name}</h3>
+                <Badge variant="secondary">{org.slug}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Created {new Date(org.created_at).toLocaleDateString()}
+              </p>
+            </CardContent>
           </Card>
         </Link>
       ))}

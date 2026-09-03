@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
-import { Card, EmptyState, Spinner } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState, PageHeader } from "@/components/ui/feedback";
+import { CardGridSkeleton } from "@/components/ui/skeletons";
 import type { Organization, Project } from "@/lib/types";
 
 interface OrgWithProjects {
@@ -40,20 +42,26 @@ export default function ProjectsPage() {
 
   return (
     <div>
-      <header className="border-b border-slate-200 bg-white px-6 py-5">
-        <h1 className="text-lg font-semibold text-slate-900">Projects</h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          {total} project{total === 1 ? "" : "s"} across your organizations.
-        </p>
-      </header>
-
+      <PageHeader
+        title="All projects"
+        subtitle={
+          data
+            ? `${total} project${total === 1 ? "" : "s"} across your organizations.`
+            : "Loading your projects…"
+        }
+      />
       <div className="mx-auto max-w-5xl px-6 py-6">
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {!data && (
-          <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
-            <Spinner className="h-4 w-4" /> Loading…
-          </div>
+        <div className="mb-4 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Tip: pick an organization first — project tools live inside{" "}
+          <Link href="/orgs" className="font-medium text-foreground underline underline-offset-4">
+            Organizations → Projects
+          </Link>
+          , Supabase-style. This global view is a search shortcut.
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">{error}</p>
         )}
+        {!data && !error && <CardGridSkeleton count={6} label="Loading projects" />}
 
         {data && total === 0 && (
           <EmptyState title="No projects yet" hint="Create an organization and add a project to get started." />
@@ -61,18 +69,20 @@ export default function ProjectsPage() {
 
         {data?.map(({ org, projects }) => (
           <section key={org.id} className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               {org.name}
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {projects.length === 0 && (
-                <p className="text-sm text-slate-400">No projects in this org yet.</p>
+                <p className="text-sm text-muted-foreground">No projects in this org yet.</p>
               )}
               {projects.map((p) => (
                 <Link key={p.id} href={`/orgs/${org.id}/projects/${p.id}`} className="group">
-                  <Card className="p-4 transition-shadow group-hover:shadow-md">
-                    <h3 className="font-semibold text-slate-900 group-hover:text-brand-700">{p.name}</h3>
-                    <p className="mt-1 text-xs text-slate-500">{p.slug}</p>
+                  <Card className="transition-shadow group-hover:shadow-md">
+                    <CardContent className="p-4 pt-4">
+                      <h3 className="font-semibold text-foreground">{p.name}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">{p.slug}</p>
+                    </CardContent>
                   </Card>
                 </Link>
               ))}

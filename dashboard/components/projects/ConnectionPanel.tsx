@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { TableBrowser } from "@/components/data/TableBrowser";
-import { Badge, Button, EmptyState, ErrorBanner, Input, Label, Spinner } from "@/components/ui";
+import { Badge, Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableBrowserSkeleton } from "@/components/ui/skeletons";
 import type { Connection } from "@/lib/types";
 
 type ConnectMode = "byodb" | "provisioned";
@@ -89,22 +91,24 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
 
   const connected = conn !== "loading" && conn !== null && (conn as Connection)?.status === "connected";
   const modeLabel = (conn as Connection)?.mode === "provisioned" ? "Provisioned" : "BYODB";
+  const isInitialLoading = conn === "loading";
 
   return (
     <div className="space-y-6">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">
-          {connected ? "Replace database" : "Set up a database"}
+        <h2 className="mb-2 text-sm font-semibold text-foreground">
+          {isInitialLoading ? "Loading connection…" : connected ? "Replace database" : "Set up a database"}
         </h2>
 
         <div className="mb-3 flex max-w-xl gap-2">
           <button
             type="button"
             onClick={() => setMode("provisioned")}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+            aria-pressed={mode === "provisioned"}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
               mode === "provisioned"
-                ? "border-brand-600 bg-brand-50 text-brand-700"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                ? "border-primary bg-accent text-foreground"
+                : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             }`}
           >
             New provisioned DB
@@ -112,17 +116,18 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
           <button
             type="button"
             onClick={() => setMode("byodb")}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+            aria-pressed={mode === "byodb"}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
               mode === "byodb"
-                ? "border-brand-600 bg-brand-50 text-brand-700"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                ? "border-primary bg-accent text-foreground"
+                : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             }`}
           >
             Connect existing
           </button>
         </div>
 
-        <form onSubmit={save} className="max-w-xl space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <form onSubmit={save} className="max-w-xl space-y-3 rounded-xl border border-border bg-card p-4">
           {mode === "provisioned" ? (
             <div className="space-y-3">
               <div>
@@ -133,10 +138,11 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                       key={e}
                       type="button"
                       onClick={() => setEngine(e)}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                      aria-pressed={engine === e}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                         engine === e
-                          ? "border-brand-600 bg-brand-50 text-brand-700"
-                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                          ? "border-primary bg-accent text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       }`}
                     >
                       {e === "postgres" ? "PostgreSQL" : "FerretDB (Mongo-compatible)"}
@@ -145,11 +151,11 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-muted-foreground">
                   Openbase spins up a dedicated {engine === "postgres" ? "Postgres" : "FerretDB"} container,
                   generates its credentials, and encrypts them at rest (SCHEMA.md §2).
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {engine === "postgres"
                     ? "Full relational capabilities: tables, joins, constraints."
                     : "Mongo wire-compatible document store via FerretDB on Postgres; no relations yet (honest Capabilities)."}
@@ -167,7 +173,7 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                 onChange={(e) => setConnString(e.target.value)}
                 placeholder="postgres://user:pass@host:5432/db, mysql://user:pass@host:3306/db, mongodb://user:pass@host:27017/, redis://host:6379, http://host:6333 (Qdrant), or http://host:2480 (ArcadeDB)"
                 />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-muted-foreground">
                 The engine is auto-detected from the URL scheme: postgres://, mysql://,
                 mongodb://, redis:// (Valkey), http(s)://…:6333 (Qdrant), or http(s)://…:2480
                 (ArcadeDB). Credentials are
@@ -177,7 +183,7 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
           )}
           {error && <ErrorBanner message={error} />}
           {message && (
-            <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
               {message}
             </div>
           )}
@@ -188,19 +194,24 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Current connection</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Current connection</h2>
         {conn === "loading" ? (
-          <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
-            <Spinner className="h-4 w-4" /> Loading…
+          <div role="status" aria-label="Loading current connection" className="max-w-xl rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+            <span className="sr-only">Loading current connection…</span>
           </div>
         ) : connected ? (
-          <div className="flex max-w-xl items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex max-w-xl items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-3">
               <Badge tone="blue">{(conn as Connection).engine}</Badge>
               <Badge tone="amber">{modeLabel}</Badge>
               <Badge tone="green">connected</Badge>
               {(conn as Connection).last_checked_at && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted-foreground">
                   checked {new Date((conn as Connection).last_checked_at!).toLocaleString()}
                 </span>
               )}
@@ -218,9 +229,9 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Data browser</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Data browser</h2>
         {conn === "loading" ? (
-          <Spinner className="h-4 w-4" />
+          <TableBrowserSkeleton label="Loading data browser" />
         ) : connected ? (
           <TableBrowser projectId={projectId} />
         ) : (

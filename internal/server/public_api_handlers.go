@@ -50,19 +50,28 @@ func (s *Server) getFullSchema(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		cols := schema.Columns
+		if cols == nil {
+			cols = []adapter.ColumnInfo{}
+		}
+		idx := schema.Indexes
+		if idx == nil {
+			idx = []adapter.IndexInfo{}
+		}
 		out = append(out, schemaCollection{
 			Name:    schema.Collection,
-			Columns: schema.Columns,
-			Indexes: schema.Indexes,
+			Columns: cols,
+			Indexes: idx,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 
 	// FK relationships are only meaningful on relational engines; the explorer
 	// UI gates the diagram on Capabilities.SupportsForeignKeys.
+	// Always return [] (never null) so the dashboard can call .length safely.
 	relationships := []adapter.Relationship{}
 	if a.Capabilities().SupportsForeignKeys {
-		if rels, err := a.ListRelationships(r.Context()); err == nil {
+		if rels, err := a.ListRelationships(r.Context()); err == nil && rels != nil {
 			relationships = rels
 		}
 	}

@@ -27,6 +27,9 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
+// Compile-time assertion that Adapter supports raw read-only SQL.
+var _ adapter.RawQuerier = (*Adapter)(nil)
+
 // New returns a Postgres adapter with no live connection yet.
 func New() *Adapter {
 	return &Adapter{}
@@ -242,6 +245,10 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 
 	var result adapter.ResultSet
 	result.Columns = cols
+	if result.Columns == nil {
+		result.Columns = []string{}
+	}
+	result.Rows = []map[string]any{}
 	for rows.Next() {
 		vals, err := rows.Values()
 		if err != nil {
@@ -250,6 +257,47 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 		row := make(map[string]any, len(cols))
 		for i, v := range vals {
 			row[cols[i]] = normalizeValue(v)
+		}
+		result.Rows = append(result.Rows, row)
+	}
+	return result, rows.Err()
+}
+
+// ExecRaw executes a read-only raw SQL statement (SELECT/WITH/EXPLAIN).
+// Write-guard validation lives in the server handler; this method caps rows
+// at adapter.MaxRawRows so a runaway SELECT can't exhaust host memory.
+func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if err := a.requirePool(); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	rows, err := a.pool.Query(ctx, query)
+	if err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("postgres: exec raw: %w", err)
+	}
+	defer rows.Close()
+
+	fieldDescs := rows.FieldDescriptions()
+	cols := make([]string, 0, len(fieldDescs))
+	for _, fd := range fieldDescs {
+		cols = append(cols, string(fd.Name))
+	}
+	result := adapter.ResultSet{Columns: cols, Rows: []map[string]any{}}
+	if result.Columns == nil {
+		result.Columns = []string{}
+	}
+	for rows.Next() {
+		if len(result.Rows) >= adapter.MaxRawRows {
+			break
+		}
+		vals, err := rows.Values()
+		if err != nil {
+			return result, err
+		}
+		row := make(map[string]any, len(cols))
+		for i, v := range vals {
+			if i < len(cols) {
+				row[cols[i]] = normalizeValue(v)
+			}
 		}
 		result.Rows = append(result.Rows, row)
 	}

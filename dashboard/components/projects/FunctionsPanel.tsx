@@ -10,8 +10,8 @@ import {
   ErrorBanner,
   Input,
   Label,
-  Spinner,
 } from "@/components/ui";
+import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import type { Function } from "@/lib/types";
 
 const TEMPLATES: Record<string, string> = {
@@ -100,17 +100,13 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading functions…
-      </div>
-    );
+    return <ToolPageSkeleton label="Loading functions" />;
   }
 
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">New Function</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">New Function</h2>
         <form onSubmit={create} className="max-w-3xl space-y-3">
           <div className="flex items-end gap-3">
             <div className="flex-1">
@@ -128,10 +124,11 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={() => pickRuntime("node")}
-                  className={`rounded-md px-3 py-2 text-sm font-medium ${
+                  aria-pressed={runtime === "node"}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     runtime === "node"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
                   Node
@@ -139,10 +136,11 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   onClick={() => pickRuntime("python")}
-                  className={`rounded-md px-3 py-2 text-sm font-medium ${
+                  aria-pressed={runtime === "python"}
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                     runtime === "python"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
                   Python
@@ -158,7 +156,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
               onChange={(e) => setSource(e.target.value)}
               rows={10}
               spellCheck={false}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-input bg-muted p-3 font-mono text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
           <Button type="submit" loading={creating}>
@@ -170,7 +168,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Functions</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Functions</h2>
         {functions.length === 0 ? (
           <EmptyState
             title="No functions yet"
@@ -181,14 +179,14 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
             {functions.map((f) => (
               <div
                 key={f.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-800">{f.name}</span>
+                    <span className="text-sm font-medium text-foreground">{f.name}</span>
                     <Badge tone={f.runtime === "node" ? "green" : "blue"}>{f.runtime}</Badge>
                   </div>
-                  <div className="mt-0.5 text-xs text-slate-500">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     created {new Date(f.created_at).toLocaleDateString()}
                   </div>
                 </div>

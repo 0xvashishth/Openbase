@@ -1,39 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { OrgList } from "@/components/orgs/OrgList";
 import { CreateOrgForm } from "@/components/orgs/CreateOrgForm";
-import { Button } from "@/components/ui";
-
-function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <header className="border-b border-slate-200 bg-white px-6 py-5">
-      <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
-      <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>
-    </header>
-  );
-}
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/ui/feedback";
 
 export default function OrganizationsPage() {
-  const [showCreate, setShowCreate] = useState(false);
+  const [open, setOpen] = useState(false);
 
   return (
     <div>
       <PageHeader title="Organizations" subtitle="Everything in Openbase lives inside an organization." />
       <div className="mx-auto max-w-5xl px-6 py-6">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-slate-500">Your organizations</p>
-          <Button onClick={() => setShowCreate((v) => !v)} variant={showCreate ? "secondary" : "primary"}>
-            {showCreate ? "Cancel" : "New organization"}
+          <p className="text-sm text-muted-foreground">Your organizations</p>
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" aria-hidden /> New organization
           </Button>
         </div>
 
-        {showCreate && (
-          <div className="mb-6 max-w-md rounded-xl border border-brand-200 bg-brand-50/40 p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Create an organization</h2>
-            <CreateOrgForm onCreated={() => setShowCreate(false)} />
-          </div>
-        )}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create an organization</DialogTitle>
+              <DialogDescription>Organizations own projects and billing settings.</DialogDescription>
+            </DialogHeader>
+            <CreateOrgForm onCreated={() => setOpen(false)} />
+          </DialogContent>
+        </Dialog>
 
         <OrgList />
       </div>

@@ -5,7 +5,8 @@ import { api, API_URL } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { openbaseRealtime, type LiveClient } from "@/lib/realtime";
 import type { RealtimeChange } from "@/lib/realtime";
-import { Button, ErrorBanner, Input, Label, Spinner } from "@/components/ui";
+import { Button, ErrorBanner, Input, Label } from "@/components/ui";
+import { ToolPageSkeleton } from "@/components/ui/skeletons";
 
 interface Row {
   [key: string]: unknown;
@@ -152,18 +153,14 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
-        <Spinner className="h-4 w-4" /> Loading collections…
-      </div>
-    );
+    return <ToolPageSkeleton label="Loading collections" />;
   }
 
   return (
     <div className="space-y-4">
       <section className="max-w-2xl">
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Live updates</h2>
-        <p className="mb-3 text-xs text-slate-500">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Live updates</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
           Pick a table and subscribe. Insert a row (via the auto-generated REST API) and watch it
           appear instantly over the WebSocket gateway.
         </p>
@@ -174,7 +171,7 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
               id="rt-collection"
               value={collection}
               onChange={(e) => setCollection(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <option value="">Select a table…</option>
               {collections.map((c) => (
@@ -190,8 +187,8 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
         </div>
         {connected && (
           <div className="mt-2 flex items-center gap-2 text-xs">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-slate-600">live — listening on {collection}</span>
+            <span className="h-2 w-2 rounded-full bg-success/100" />
+            <span className="text-muted-foreground">live — listening on {collection}</span>
           </div>
         )}
       </section>
@@ -200,7 +197,7 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
 
       {connected && (
         <section className="max-w-2xl">
-          <h3 className="mb-2 text-sm font-semibold text-slate-800">Insert a row</h3>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Insert a row</h3>
           <form onSubmit={insertRow} className="flex items-end gap-3">
             <div className="flex-1">
               <Label htmlFor="rt-name">name</Label>
@@ -220,15 +217,15 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
 
       {connected && (
         <section className="max-w-2xl">
-          <h3 className="mb-2 text-sm font-semibold text-slate-800">
-            {collection} <span className="font-normal text-slate-400">(live)</span>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            {collection} <span className="font-normal text-muted-foreground">(live)</span>
           </h3>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             {rows.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-slate-400">No rows yet.</div>
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">No rows yet.</div>
             ) : (
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="bg-muted text-xs uppercase text-muted-foreground">
                   <tr>
                     {Object.keys(rows[0]).map((k) => (
                       <th key={k} className="px-4 py-2 font-medium">
@@ -237,9 +234,9 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-border">
                   {rows.map((r, i) => (
-                    <tr key={i} className="text-slate-700">
+                    <tr key={i} className="text-muted-foreground">
                       {Object.entries(r).map(([k, v]) => (
                         <td key={k} className="px-4 py-2">
                           {String(v)}

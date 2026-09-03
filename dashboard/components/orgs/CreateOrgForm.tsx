@@ -30,7 +30,7 @@ export function CreateOrgForm({ onCreated }: { onCreated?: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="space-y-4">
       {error && <ErrorBanner message={error} />}
       <div>
         <Label htmlFor="org-name">Name</Label>
@@ -51,7 +51,7 @@ export function CreateOrgForm({ onCreated }: { onCreated?: () => void }) {
           placeholder="acme"
           required
         />
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-muted-foreground">
           Unique, URL-safe identifier used in the dashboard.
         </p>
       </div>

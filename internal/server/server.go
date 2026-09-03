@@ -141,6 +141,7 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/projects/{projectID}/collections", s.requireAuth(http.HandlerFunc(s.listCollections)))
 	mux.Handle("GET /v1/projects/{projectID}/collections/{collection}", s.requireAuth(http.HandlerFunc(s.getSchema)))
 	mux.Handle("POST /v1/projects/{projectID}/query", s.requireAuth(http.HandlerFunc(s.queryRows)))
+	mux.Handle("POST /v1/projects/{projectID}/sql", s.requireAuth(http.HandlerFunc(s.execSQL)))
 	mux.Handle("GET /v1/projects/{projectID}/schema", s.requireAuth(http.HandlerFunc(s.getFullSchema)))
 
 	// API key management (dashboard-authenticated).

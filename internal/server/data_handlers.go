@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/metadata"
@@ -336,6 +338,110 @@ func (s *Server) queryRows(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeConnectionErr(w, err)
 		return
+	}
+	// Go nil slices serialize as JSON null; the dashboard calls .length/.map
+	// unconditionally, so coerce to [] here (defense in depth with FE normalize).
+	if rs.Columns == nil {
+		rs.Columns = []string{}
+	}
+	if rs.Rows == nil {
+		rs.Rows = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, rs)
+}
+
+// ---- Raw read-only SQL (SQL editor) ----
+
+// maxRawSQLBytes caps the request body so a pasted dump can't OOM the host.
+const maxRawSQLBytes = 20000
+
+type execSQLRequest struct {
+	Query string `json:"query"`
+}
+
+// validateReadOnlySQL rejects empty, oversized, or non-read statements.
+// Only SELECT / WITH / EXPLAIN (after stripping leading comments) are allowed.
+func validateReadOnlySQL(q string) error {
+	trimmed := strings.TrimSpace(q)
+	if trimmed == "" {
+		return fmt.Errorf("query is required")
+	}
+	if len(q) > maxRawSQLBytes {
+		return fmt.Errorf("query exceeds %d bytes", maxRawSQLBytes)
+	}
+	rest := trimmed
+	for {
+		rest = strings.TrimSpace(rest)
+		if strings.HasPrefix(rest, "--") {
+			if i := strings.Index(rest, "\n"); i >= 0 {
+				rest = rest[i+1:]
+				continue
+			}
+			return fmt.Errorf("query is required")
+		}
+		if strings.HasPrefix(rest, "/*") {
+			if i := strings.Index(rest, "*/"); i >= 0 {
+				rest = rest[i+2:]
+				continue
+			}
+			return fmt.Errorf("unterminated comment")
+		}
+		break
+	}
+	rest = strings.TrimLeft(rest, "( ")
+	first := strings.ToUpper(strings.Fields(rest)[0])
+	// Strip trailing semicolons/punctuation from the first word.
+	first = strings.Trim(first, ";()")
+	switch first {
+	case "SELECT", "WITH", "EXPLAIN":
+		return nil
+	default:
+		return fmt.Errorf("only read-only SELECT/WITH/EXPLAIN statements are allowed")
+	}
+}
+
+// execSQL runs a raw read-only query against SQL engines (postgres, mysql).
+// Document/key-value/vector engines don't implement adapter.RawQuerier and get
+// an honest 400 instead of a fake execution.
+func (s *Server) execSQL(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	var req execSQLRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateReadOnlySQL(req.Query); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	a, _, err := s.connectProject(r.Context(), projectID)
+	if err != nil {
+		s.writeConnectionErr(w, err)
+		return
+	}
+	defer func() { _ = a.Disconnect(r.Context()) }()
+
+	raw, ok := a.(adapter.RawQuerier)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "raw SQL is only supported for postgres and mysql; use the query builder for this engine")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	rs, err := raw.ExecRaw(ctx, req.Query)
+	if err != nil {
+		s.writeConnectionErr(w, err)
+		return
+	}
+	if rs.Columns == nil {
+		rs.Columns = []string{}
+	}
+	if rs.Rows == nil {
+		rs.Rows = []map[string]any{}
 	}
 	writeJSON(w, http.StatusOK, rs)
 }

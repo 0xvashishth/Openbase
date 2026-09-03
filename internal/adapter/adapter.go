@@ -146,6 +146,16 @@ type ResultSet struct {
 	Rows    []map[string]any `json:"rows"`
 }
 
+// MaxRawRows caps raw SQL responses so a runaway SELECT can't OOM the host.
+const MaxRawRows = 200
+
+// RawQuerier is an optional interface for SQL engines that support
+// read-only raw query execution (SQL editor). Engines that don't speak SQL
+// simply don't implement it; the server reports an honest error.
+type RawQuerier interface {
+	ExecRaw(ctx context.Context, query string) (ResultSet, error)
+}
+
 // InsertResult reports what an Insert produced.
 type InsertResult struct {
 	Collection string
