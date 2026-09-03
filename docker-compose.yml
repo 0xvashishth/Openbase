@@ -45,8 +45,11 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      args:
+        OPENBASE_API_INTERNAL_URL: "http://api:8080"
     environment:
-      NEXT_PUBLIC_OPENBASE_API_URL: "http://localhost:8080"
+      NEXT_PUBLIC_OPENBASE_API_URL: ""
+      OPENBASE_API_INTERNAL_URL: "http://api:8080"
     ports:
       - "3000:3000"
     depends_on:

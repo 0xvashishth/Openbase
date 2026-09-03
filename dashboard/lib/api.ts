@@ -20,8 +20,7 @@ import type {
 
 // Base URL of the Openbase API. Configure via NEXT_PUBLIC_OPENBASE_API_URL
 // (defaults to the local dev server).
-export const API_URL =
-  process.env.NEXT_PUBLIC_OPENBASE_API_URL ?? "http://localhost:8080";
+export const API_URL = "";
 
 const TOKEN_KEY = "openbase_token";
 
