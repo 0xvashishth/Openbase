@@ -54,5 +54,9 @@ func detectHTTP(connStr string) (Engine, error) {
 	if u.Port() == "6333" || u.Port() == "6334" {
 		return EngineQdrant, nil
 	}
+	// ArcadeDB default HTTP ports: 2480 (http) / 2481 (https, bolt 2424).
+	if u.Port() == "2480" || u.Port() == "2481" {
+		return EngineArcadeDB, nil
+	}
 	return "", ErrUnknownEngine
 }

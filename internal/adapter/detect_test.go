@@ -21,6 +21,8 @@ func TestDetectEngine(t *testing.T) {
 		{"valkey", "valkey://localhost:6379/0", EngineValkey, false},
 		{"rediss", "rediss://localhost:6379/0", EngineValkey, false},
 		{"bolt arcadedb", "bolt://localhost:2480", EngineArcadeDB, false},
+		{"arcadedb default port", "http://localhost:2480", EngineArcadeDB, false},
+		{"arcadedb tls port", "https://arcade.internal:2481", EngineArcadeDB, false},
 		{"qdrant default port", "http://localhost:6333", EngineQdrant, false},
 		{"qdrant grpc port", "https://qdrant.internal:6334", EngineQdrant, false},
 		{"empty", "", "", true},

@@ -46,7 +46,7 @@ All chosen for **permissive, redistribution-safe licenses** — no SSPL, no BSL 
 | Relational | MySQL Community | GPLv2 | ✅ implemented |
 | Document (Mongo-compatible) | FerretDB (on Postgres) | Apache 2.0 | ✅ implemented |
 | Key-Value / Cache | Valkey (Redis fork) | BSD | ✅ implemented |
-| Graph | ArcadeDB | Apache 2.0 | planned |
+| Graph | ArcadeDB | Apache 2.0 | ✅ implemented (document-model surface) |
 | Vector (AI/embeddings) | Qdrant or Chroma | Apache 2.0 | ✅ Qdrant implemented (Chroma planned) |
 
 BYODB mode additionally accepts connection strings to **any** database the adapter layer supports, including ones the platform doesn't provision itself (e.g. a user's existing real MongoDB Atlas cluster) — the platform just connects, it doesn't redistribute that engine, so licensing concerns don't apply there.
@@ -60,7 +60,7 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 5. **Phase 4** — Triggers + runtime functions (complete)
 6. **Phase 5** — Realtime layer (complete)
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1) (complete)
-8. **Phase 7** — Remaining adapters (Valkey ✅, MySQL ✅, Qdrant ✅, graph, Chroma) + polish (in progress — Valkey, MySQL, Qdrant, function-sandbox hardening done)
+8. **Phase 7** — Remaining adapters (Valkey ✅, MySQL ✅, Qdrant ✅, ArcadeDB ✅, Chroma) + polish (in progress — Valkey, MySQL, Qdrant, ArcadeDB, function-sandbox hardening done)
 
 > **Status:** Phases 0–6 are **complete** (API + metadata store + auth + encryption + Next.js
 > dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
@@ -75,7 +75,10 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 > (`mysql://` auto-detect, native CRUD/schema/joins/transactions/full-text, with trigger/realtime
 > delivery honestly gated off until a queue-table + polling tier lands); a Qdrant vector adapter
 > (`http(s)://…:6333` auto-detect, points+payloads exposed as rows/columns, `SupportsVectorSearch`
-> honest with no joins/triggers/realtime); and a function-sandbox
+> honest with no joins/triggers/realtime); an ArcadeDB adapter (`http(s)://…:2480`/`bolt://`
+> auto-detect, document-model: types as collections + full CRUD/schema/filtering via its SQL-style
+> REST API, `SupportsRelationalJoins:false` — graph/traversal surface is a documented follow-up);
+> and a function-sandbox
 > security audit (process-group isolation so descendant processes die on timeout, plus bounded
 > stdout/stderr capture so a runaway function can't exhaust host memory).
 > External clients can hit their project's generated REST endpoints with an

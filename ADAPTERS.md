@@ -63,7 +63,7 @@ The dashboard and API layer **query this before rendering a feature**. Example: 
 | MySQL ³ | Yes | Yes | `false` until delivery wired | `none` (delivery not wired) | Yes | No |
 | FerretDB (on Postgres) ¹ | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
 | Valkey ² | No | No | No | `none` (keyspace notifs not implemented) | No | No |
-| ArcadeDB (graph) | N/A (graph traversal instead) | N/A | Limited | Polling | Yes | Yes |
+| ArcadeDB (graph) ⁵ | No (doc-model; graph traversal is a follow-up) | No | No | `none` | No | No |
 | Qdrant / Chroma (vector) ⁴ | No | No | No | No | No | Yes (native) |
 
 ¹ The shipped FerretDB adapter currently returns `Realtime:none` in `Capabilities()`; the polling-based
@@ -84,6 +84,13 @@ return `ErrUnsupported`. The flags flip when that tier lands.
 honestly reports `SupportsVectorSearch: true` (Qdrant is a vector engine) with no joins/FKs/triggers/
 realtime. The universal query IR currently speaks equality filters over payloads, so a dedicated
 vector/similarity-search method is a documented follow-up; until then `Query` filters payloads.
+
+⁵ The shipped ArcadeDB adapter uses its **document-model** surface (per scoping decision), not the
+graph model: types are collections, documents are rows, served over ArcadeDB's SQL-style REST API
+(`POST /api/v1/query|command/{db}`). It reports honest capabilities — no relational joins/foreign
+keys/transactions/triggers/realtime (`AllErrUnsupported`, `Realtime:none`) — because graph
+traversal and edge `ListRelationships` are a documented follow-up; until then the matrix above
+reflects what is shipped, not the graph-model intent.
 
 This table should live in code as the actual `Capabilities()` return values, not just documentation — keep them in sync.
 

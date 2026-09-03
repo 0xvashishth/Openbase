@@ -165,11 +165,12 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                 autoComplete="off"
                 value={connString}
                 onChange={(e) => setConnString(e.target.value)}
-                placeholder="postgres://user:pass@host:5432/db, mysql://user:pass@host:3306/db, mongodb://user:pass@host:27017/, redis://host:6379, or http://host:6333"
+                placeholder="postgres://user:pass@host:5432/db, mysql://user:pass@host:3306/db, mongodb://user:pass@host:27017/, redis://host:6379, http://host:6333 (Qdrant), or http://host:2480 (ArcadeDB)"
                 />
               <p className="mt-1 text-xs text-slate-400">
                 The engine is auto-detected from the URL scheme: postgres://, mysql://,
-                mongodb://, redis:// (Valkey), or http(s)://…:6333 (Qdrant). Credentials are
+                mongodb://, redis:// (Valkey), http(s)://…:6333 (Qdrant), or http(s)://…:2480
+                (ArcadeDB). Credentials are
                 encrypted at rest (SCHEMA.md §2).
               </p>
             </div>

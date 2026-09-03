@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/openbase/openbase/internal/adapter"
+	"github.com/openbase/openbase/internal/adapter/arcadedb"
 	"github.com/openbase/openbase/internal/adapter/ferretdb"
 	"github.com/openbase/openbase/internal/adapter/mysql"
 	"github.com/openbase/openbase/internal/adapter/postgres"
@@ -125,6 +126,8 @@ func (f *Factory) ConnectForEngine(ctx context.Context, engine adapter.Engine, c
 		a = mysql.New()
 	case adapter.EngineQdrant:
 		a = qdrant.New()
+	case adapter.EngineArcadeDB:
+		a = arcadedb.New()
 	default:
 		return nil, fmt.Errorf("%w: engine %q not yet implemented", adapter.ErrUnsupported, engine)
 	}
