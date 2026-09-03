@@ -70,6 +70,10 @@ The **MySQL adapter** is covered at the logic/SQL-generation level with
 identifier validation the adapter emits) — this needs no live MySQL and no Docker. Live
 integration testing against a real MySQL/MariaDB remains a documented follow-up.
 
+The **Qdrant adapter** is exercised against an in-process [`httptest`](https://pkg.go.dev/net/http/httptest)
+fake of the Qdrant REST API (an in-memory point store), so the HTTP client adapter is fully covered
+without a live Qdrant or Docker. Live integration against a real Qdrant remains a follow-up.
+
 ```bash
 go test ./...     # full suite (provisioning tests need the Docker daemon and skip if absent)
 make test-short   # -short variant

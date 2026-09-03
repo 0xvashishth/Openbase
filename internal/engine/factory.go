@@ -11,6 +11,7 @@ import (
 	"github.com/openbase/openbase/internal/adapter/ferretdb"
 	"github.com/openbase/openbase/internal/adapter/mysql"
 	"github.com/openbase/openbase/internal/adapter/postgres"
+	"github.com/openbase/openbase/internal/adapter/qdrant"
 	"github.com/openbase/openbase/internal/adapter/valkey"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/server"
@@ -122,6 +123,8 @@ func (f *Factory) ConnectForEngine(ctx context.Context, engine adapter.Engine, c
 		a = valkey.New()
 	case adapter.EngineMySQL:
 		a = mysql.New()
+	case adapter.EngineQdrant:
+		a = qdrant.New()
 	default:
 		return nil, fmt.Errorf("%w: engine %q not yet implemented", adapter.ErrUnsupported, engine)
 	}

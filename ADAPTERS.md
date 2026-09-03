@@ -64,7 +64,7 @@ The dashboard and API layer **query this before rendering a feature**. Example: 
 | FerretDB (on Postgres) ¹ | Limited | No (document model) | Via polling | Polling (no native change streams yet) | Limited | No |
 | Valkey ² | No | No | No | `none` (keyspace notifs not implemented) | No | No |
 | ArcadeDB (graph) | N/A (graph traversal instead) | N/A | Limited | Polling | Yes | Yes |
-| Qdrant / Chroma (vector) | No | No | No | No | No | Yes (native) |
+| Qdrant / Chroma (vector) ⁴ | No | No | No | No | No | Yes (native) |
 
 ¹ The shipped FerretDB adapter currently returns `Realtime:none` in `Capabilities()`; the polling-based
 emulation tier (ADAPTERS.md §3, tier 2) arrives with the triggers/realtime phases, at which point the
@@ -79,6 +79,11 @@ platform's trigger/realtime *delivery*. MySQL has native triggers, but without a
 change-stream tier a created trigger would fire into a void, so the adapter honestly returns
 `SupportsNativeTriggers:false` and `Realtime:none`, and `RegisterTrigger`/`SubscribeToChanges`
 return `ErrUnsupported`. The flags flip when that tier lands.
+
+⁴ The shipped Qdrant adapter exposes each point (id + vector + JSON payload) as a universal row and
+honestly reports `SupportsVectorSearch: true` (Qdrant is a vector engine) with no joins/FKs/triggers/
+realtime. The universal query IR currently speaks equality filters over payloads, so a dedicated
+vector/similarity-search method is a documented follow-up; until then `Query` filters payloads.
 
 This table should live in code as the actual `Capabilities()` return values, not just documentation — keep them in sync.
 
