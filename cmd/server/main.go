@@ -82,6 +82,7 @@ func run(log *slog.Logger) error {
 		AdapterFactory: engine.NewFactory(),
 		Secrets:        secretsProv,
 		AllowedOrigins: cfg.AllowedOrigins,
+		PublicBaseURL:  cfg.PublicBaseURL,
 		RealtimeHub:    server.NewRealtimeHub(store, secretsProv, engine.NewFactory(), log),
 	}
 

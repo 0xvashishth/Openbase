@@ -36,6 +36,12 @@ type Services struct {
 	// The dashboard origin should be listed in production.
 	AllowedOrigins []string
 
+	// PublicBaseURL is the externally-reachable origin of this API (no trailing
+	// slash), e.g. "https://api.example.com". Advertised by the Connect
+	// endpoint so copy-paste snippets work outside the dashboard. Empty means
+	// "derive from the request" (honouring X-Forwarded-Proto/Host).
+	PublicBaseURL string
+
 	// Provisioner creates and destroys dedicated per-project database
 	// instances (ARCHITECTURE.md §2.7). If nil, "provisioned" project creation
 	// returns 501.
@@ -138,6 +144,9 @@ func New(svc *Services) http.Handler {
 	mux.Handle("POST /v1/projects/{projectID}/connections/test", s.requireAuth(http.HandlerFunc(s.testConnection)))
 	mux.Handle("POST /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.saveConnection)))
 	mux.Handle("DELETE /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.deleteConnection)))
+
+	// Outbound wiring info for external apps (powers the dashboard Connect tab).
+	mux.Handle("GET /v1/projects/{projectID}/connect-info", s.requireAuth(http.HandlerFunc(s.getConnectInfo)))
 
 	mux.Handle("GET /v1/projects/{projectID}/collections", s.requireAuth(http.HandlerFunc(s.listCollections)))
 	mux.Handle("GET /v1/projects/{projectID}/collections/{collection}", s.requireAuth(http.HandlerFunc(s.getSchema)))

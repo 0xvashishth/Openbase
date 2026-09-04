@@ -53,6 +53,36 @@ export interface TestConnectionResult {
   message?: string;
 }
 
+/** Endpoint reference returned by /connect-info (server is the source of truth). */
+export interface ConnectEndpoints {
+  list_tables: string;
+  query_rows: string;
+  table_schema: string;
+  insert_row: string;
+  update_row: string;
+  delete_row: string;
+  realtime: string;
+}
+
+/**
+ * Everything an external app needs to talk TO Openbase. Never carries database
+ * credentials — clients authenticate with an API key against /v1/api/*.
+ */
+export interface ConnectInfo {
+  project_id: string;
+  has_connection: boolean;
+  engine?: string;
+  mode?: ConnectionMode;
+  status?: ConnectionStatus;
+  api_base_url: string;
+  realtime_url: string;
+  endpoints: ConnectEndpoints;
+  auth_header: string;
+  capabilities?: CapabilitySet;
+  supports_realtime?: string;
+  active_api_keys: number;
+}
+
 // Adapter-backed schema/query types.
 
 export interface ColumnInfo {

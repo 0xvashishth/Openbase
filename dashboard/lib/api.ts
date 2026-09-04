@@ -3,6 +3,7 @@
 import type {
   APIKeyView,
   AuthResponse,
+  ConnectInfo,
   Connection,
   FullSchema,
   Function,
@@ -134,6 +135,10 @@ export const api = {
     }, token),
   deleteConnection: (token: string, projectId: string) =>
     request<{ removed: boolean }>("DELETE", `/v1/projects/${projectId}/connections`, undefined, token),
+
+  // Outbound wiring info for the Connect tab (URLs, endpoints, capabilities).
+  getConnectInfo: (token: string, projectId: string) =>
+    request<ConnectInfo>("GET", `/v1/projects/${projectId}/connect-info`, undefined, token),
 
   // Adapter-backed data browsing.
   listCollections: (token: string, projectId: string) =>

@@ -22,7 +22,7 @@ import {
   realtimeUrl,
   resolveApiBaseUrl,
 } from "@/lib/connect";
-import type { APIKeyView } from "@/lib/types";
+import type { APIKeyView, ConnectInfo } from "@/lib/types";
 
 /**
  * Connect tab: how an external app talks TO Openbase (outbound). The DB Source
@@ -33,6 +33,7 @@ import type { APIKeyView } from "@/lib/types";
  */
 export function ConnectPanel({ projectId }: { projectId: string }) {
   const { orgId, engine, hasConnection, supportsRealtime } = useProject();
+  const [info, setInfo] = useState<ConnectInfo | null>(null);
   const [keys, setKeys] = useState<APIKeyView[] | null>(null);
   const [freshKey, setFreshKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -41,11 +42,18 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
     const token = authToken();
     if (!token) return;
-    try {
-      setKeys(await api.listAPIKeys(token, projectId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load API keys");
+    // connect-info is the source of truth for URLs/endpoints; the local
+    // fallback below keeps the tab usable if it fails.
+    const [infoRes, keysRes] = await Promise.allSettled([
+      api.getConnectInfo(token, projectId),
+      api.listAPIKeys(token, projectId),
+    ]);
+    if (infoRes.status === "fulfilled") setInfo(infoRes.value);
+    if (keysRes.status === "fulfilled") {
+      setKeys(keysRes.value);
+    } else {
       setKeys([]);
+      setError(keysRes.reason instanceof Error ? keysRes.reason.message : "Failed to load API keys");
     }
   }, [projectId]);
 
@@ -71,16 +79,24 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
 
   const apiBaseUrl = useMemo(
     () =>
+      info?.api_base_url ??
       resolveApiBaseUrl({
         envUrl: process.env.NEXT_PUBLIC_OPENBASE_API_URL,
         origin: typeof window === "undefined" ? "" : window.location.origin,
       }),
-    []
+    [info?.api_base_url]
   );
+  const wsUrl = info?.realtime_url ?? realtimeUrl(apiBaseUrl);
 
   const apiKey = freshKey ?? API_KEY_PLACEHOLDER;
-  const params = { apiBaseUrl, apiKey, table: TABLE_PLACEHOLDER };
-  const activeKeys = (keys ?? []).filter((k) => !k.revoked_at);
+  const params = { apiBaseUrl, apiKey, table: TABLE_PLACEHOLDER, wsUrl };
+  const activeKeys = info?.active_api_keys ?? (keys ?? []).filter((k) => !k.revoked_at).length;
+  // Prefer server truth; fall back to the project context while it loads.
+  const connected = info?.has_connection ?? hasConnection;
+  const engineLabel = info?.engine ?? engine;
+  const realtimeAvailable = info?.supports_realtime
+    ? info.supports_realtime === "native"
+    : supportsRealtime;
 
   if (keys === null) {
     return (
@@ -99,9 +115,9 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle>Connection parameters</CardTitle>
-            {engine && <Badge variant="secondary">{engine}</Badge>}
-            <Badge variant={hasConnection ? "success" : "warning"}>
-              {hasConnection ? "connected" : "no database"}
+            {engineLabel && <Badge variant="secondary">{engineLabel}</Badge>}
+            <Badge variant={connected ? "success" : "warning"}>
+              {connected ? "connected" : "no database"}
             </Badge>
           </div>
           <CardDescription>
@@ -113,9 +129,9 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           <CopyField label="API URL" value={apiBaseUrl} />
           <CopyField
             label="Realtime URL"
-            value={realtimeUrl(apiBaseUrl)}
+            value={wsUrl}
             hint={
-              supportsRealtime
+              realtimeAvailable
                 ? undefined
                 : "This engine has no native change stream — realtime is unavailable."
             }
@@ -145,9 +161,9 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
                 Create API key
               </Button>
               <span className="text-xs text-muted-foreground">
-                {activeKeys.length === 0
+                {activeKeys === 0
                   ? "No active keys yet."
-                  : `${activeKeys.length} active key${activeKeys.length === 1 ? "" : "s"} — snippets use a placeholder.`}
+                  : `${activeKeys} active key${activeKeys === 1 ? "" : "s"} — snippets use a placeholder.`}
               </span>
             </div>
           )}
@@ -161,7 +177,7 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
         </CardContent>
       </Card>
 
-      {!hasConnection && (
+      {!connected && (
         <EmptyState
           title="No database attached yet"
           hint="These endpoints answer once the project has a database."
@@ -199,6 +215,31 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           Replace <code className="font-mono">{TABLE_PLACEHOLDER}</code> with one of your tables.
         </p>
       </section>
+
+      {info && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-foreground">Endpoint reference</h2>
+          <div className="max-w-xl space-y-1.5 rounded-xl border border-border bg-card p-4 text-xs">
+            {[
+              ["List tables", info.endpoints.list_tables],
+              ["Read rows", info.endpoints.query_rows],
+              ["Table schema", info.endpoints.table_schema],
+              ["Insert row", info.endpoints.insert_row],
+              ["Update row", info.endpoints.update_row],
+              ["Delete row", info.endpoints.delete_row],
+              ["Realtime", info.endpoints.realtime],
+            ].map(([title, path]) => (
+              <div key={title} className="flex flex-wrap items-baseline gap-2">
+                <span className="w-24 shrink-0 text-muted-foreground">{title}</span>
+                <code className="min-w-0 break-all font-mono text-foreground">{path}</code>
+              </div>
+            ))}
+            <p className="pt-2 text-muted-foreground">
+              Auth: <code className="font-mono">{info.auth_header}</code>
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

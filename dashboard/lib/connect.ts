@@ -18,6 +18,11 @@ export interface ConnectParams {
   apiKey: string;
   /** Table/collection used in the examples. */
   table: string;
+  /**
+   * Realtime endpoint. Defaults to the ws(s) form of apiBaseUrl; pass it
+   * explicitly when the server advertises a different one via /connect-info.
+   */
+  wsUrl?: string;
 }
 
 /** Strip trailing slashes so `${base}/v1/...` never doubles up. */
@@ -95,9 +100,9 @@ await openbase("/${table}", {
 });`;
 }
 
-export function realtimeSnippet({ apiBaseUrl, apiKey, table }: ConnectParams): string {
+export function realtimeSnippet({ apiBaseUrl, apiKey, table, wsUrl }: ConnectParams): string {
   return `// Browser / Node 22+ (native WebSocket)
-const socket = new WebSocket("${realtimeUrl(apiBaseUrl)}", {
+const socket = new WebSocket("${wsUrl ?? realtimeUrl(apiBaseUrl)}", {
   headers: { Authorization: "Bearer ${apiKey}" }, // Node: use the ws package
 });
 

@@ -80,6 +80,12 @@ describe("snippets", () => {
     expect(out).toContain("Bearer ob_test");
   });
 
+  it("realtime snippet honours a server-advertised ws URL", () => {
+    const out = realtimeSnippet({ ...params, wsUrl: "wss://edge.example.com/v1/realtime" });
+    expect(out).toContain("wss://edge.example.com/v1/realtime");
+    expect(out).not.toContain("wss://api.example.com/v1/realtime");
+  });
+
   it("env snippet exposes only URL + key", () => {
     expect(envSnippet({ apiBaseUrl: "https://api.example.com/", apiKey: "ob_test" })).toBe(
       "OPENBASE_URL=https://api.example.com\nOPENBASE_API_KEY=ob_test"

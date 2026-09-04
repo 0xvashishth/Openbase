@@ -39,6 +39,12 @@ type Config struct {
 	// (development default).
 	AllowedOrigins []string
 
+	// PublicBaseURL is the externally-reachable origin of this API, e.g.
+	// "https://api.example.com". Advertised to clients by the connect-info
+	// endpoint. Empty (default) derives it per-request from Host /
+	// X-Forwarded-* headers, which is correct for local dev and simple proxies.
+	PublicBaseURL string
+
 	// ProvisioningEnabled toggles "provisioned" database creation. Off by
 	// default so the API boots without Docker; enable with
 	// OPENBASE_PROVISIONER_ENABLED=true when Docker is available.
@@ -59,6 +65,7 @@ func Default() (*Config, error) {
 		EncryptionKeyID: envOr("OPENBASE_ENCRYPTION_KEY_ID", "openbase-master-key-v1"),
 		EncryptionKeys:  parseKeyMap(os.Getenv("OPENBASE_ENCRYPTION_KEYS")),
 		AllowedOrigins:  splitCSV(os.Getenv("OPENBASE_ALLOWED_ORIGINS")),
+		PublicBaseURL:   strings.TrimRight(os.Getenv("OPENBASE_PUBLIC_URL"), "/"),
 		ProvisioningEnabled: os.Getenv("OPENBASE_PROVISIONER_ENABLED") == "true",
 	}
 
