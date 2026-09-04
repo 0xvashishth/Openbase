@@ -28,6 +28,11 @@ function SettingsBody() {
             </Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href={`/orgs/${project.organization_id}/projects/${project.id}/connect`}>
+              Connect an app
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href={`/orgs/${project.organization_id}/projects/${project.id}/api`}>
               Manage API keys
             </Link>

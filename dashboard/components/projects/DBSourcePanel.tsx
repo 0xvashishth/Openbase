@@ -110,9 +110,14 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-6">
+      <p className="max-w-xl text-xs text-muted-foreground">
+        This tab points Openbase <strong className="font-medium text-foreground">at</strong> a
+        database. To point an app at Openbase, use the Connect tab.
+      </p>
+
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">
-          {isInitialLoading ? "Loading connection…" : connected ? "Replace database" : "Set up a database"}
+          {isInitialLoading ? "Loading DB source…" : connected ? "Replace database" : "Set up a database"}
         </h2>
 
         <div className="mb-3 flex max-w-xl flex-wrap gap-2">
@@ -214,15 +219,15 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Current connection</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Current DB source</h2>
         {conn === "loading" ? (
-          <div role="status" aria-label="Loading current connection" className="max-w-xl rounded-xl border border-border bg-card p-4">
+          <div role="status" aria-label="Loading current DB source" className="max-w-xl rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-3">
               <Skeleton className="h-5 w-20" />
               <Skeleton className="h-5 w-24" />
               <Skeleton className="h-5 w-20" />
             </div>
-            <span className="sr-only">Loading current connection…</span>
+            <span className="sr-only">Loading current DB source…</span>
           </div>
         ) : connected ? (
           <div className="flex max-w-xl items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
@@ -242,7 +247,7 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <EmptyState
-            title="No database connected"
+            title="No database attached"
             hint="Provision a new one or attach an existing database above."
           />
         )}

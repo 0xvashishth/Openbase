@@ -32,6 +32,10 @@ services:
       OPENBASE_ENCRYPTION_KEY: "dev-only-encryption-key-change-me"
       # Dashboard origin (dev). Empty allows any origin.
       OPENBASE_ALLOWED_ORIGINS: "http://localhost:3000"
+      # Origin advertised on the Connect tab. Required here: the dashboard
+      # proxies /v1/* server-side, so the API only ever sees the internal
+      # Host (api:8080) and would otherwise hand out an unreachable URL.
+      OPENBASE_PUBLIC_URL: "http://localhost:8080"
       # "Provisioned" DB mode is off here. To enable it, the API container must
       # reach the Docker daemon: mount the socket and install the Docker CLI in
       # the image, then set OPENBASE_PROVISIONER_ENABLED: "true".

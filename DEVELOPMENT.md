@@ -53,8 +53,26 @@ All config is env-driven (`internal/config`). The most important:
 | `OPENBASE_ENCRYPTION_KEY_ID` | Name/id of the current encryption key, stamped on new rows | `openbase-master-key-v1` |
 | `OPENBASE_ENCRYPTION_KEYS` | Key-rotation registry of historical keys, `id=secret,id=secret`, kept decodable | empty |
 | `OPENBASE_ALLOWED_ORIGINS` | CORS allow-list (comma-separated); empty = any origin | empty |
+| `OPENBASE_PUBLIC_URL` | Externally-reachable API origin advertised on the Connect tab; empty derives it from `Host`/`X-Forwarded-*` | empty |
 | `OPENBASE_PROVISIONER_ENABLED` | Enable "provisioned" DB mode (needs a Docker daemon) | `false` |
 | `NEXT_PUBLIC_OPENBASE_API_URL` | Dashboard → API base URL (browser) | `http://localhost:8080` |
+
+## Two connection directions
+
+The dashboard separates them into two project tabs, and it is worth keeping the
+distinction straight when working on either:
+
+| Direction | Tab | Auth | Endpoints |
+|---|---|---|---|
+| Openbase → your database (inbound) | **DB Source** | dashboard JWT + org membership | `/v1/projects/{id}/connections` |
+| Your app → Openbase (outbound) | **Connect** | project API key (`Authorization: Bearer ob_…`) | `/v1/api/*`, `/v1/realtime` |
+
+`GET /v1/projects/{id}/connect-info` backs the Connect tab: it returns the public
+API URL, the realtime URL, the literal endpoint paths, the connected engine's
+capabilities and a count of active API keys. It never returns database
+credentials — provisioned credentials stay encrypted server-side, and BYODB
+strings belong to the user's own provider (SCHEMA.md §2). Behind a reverse
+proxy, set `OPENBASE_PUBLIC_URL` so the snippets it renders are copy-pasteable.
 
 ## Tests
 
@@ -84,7 +102,7 @@ go test ./...     # full suite (provisioning tests need the Docker daemon and sk
 make test-short   # -short variant
 ```
 
-Dashboard: `cd dashboard && npm run build`.
+Dashboard: `cd dashboard && npm test` (vitest) and `npm run build`.
 
 ### Provisioned databases from docker compose
 

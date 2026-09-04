@@ -24,12 +24,13 @@ function OverviewBody() {
   const tools = [
     { href: `${base}/tables`, icon: Table2, title: "Tables", desc: "Browse collections and rows.", locked: !hasConnection },
     { href: `${base}/schema`, icon: Network, title: "Schema", desc: "Visual tables and relationships.", locked: !hasConnection },
-    { href: `${base}/sql`, icon: SquareTerminal, title: "SQL Editor", desc: "Run queries with highlighting.", locked: !hasConnection },
+    { href: `${base}/sql`, icon: SquareTerminal, title: "SQL Editor", desc: "Run reads and writes natively.", locked: !hasConnection },
+    { href: `${base}/connect`, icon: Cable, title: "Connect", desc: "URLs, keys and snippets for your app.", locked: false },
     { href: `${base}/api`, icon: KeyRound, title: "API Keys", desc: "Auto-generated REST API access.", locked: false },
-    { href: `${base}/connect`, icon: Cable, title: "Connect", desc: "Wire your app to this project.", locked: false },
     { href: `${base}/functions`, icon: Zap, title: "Functions", desc: "Serverless event handlers.", locked: !hasConnection },
     { href: `${base}/triggers`, icon: Database, title: "Triggers", desc: "Data events → functions/webhooks.", locked: !hasConnection },
     { href: `${base}/realtime`, icon: Radio, title: "Realtime", desc: "Live WebSocket change streams.", locked: !hasConnection },
+    { href: `${base}/db-source`, icon: Plug, title: "DB Source", desc: "Provision or attach the backing DB.", locked: false },
   ];
 
   return (
@@ -46,19 +47,24 @@ function OverviewBody() {
           </div>
           <CardDescription>
             {hasConnection
-              ? "Database connected. Pick a tool below."
-              : "This project needs a database. Connect one, then browse tables."}
+              ? "Database attached. Browse it here, or wire an app to it on the Connect tab."
+              : "This project needs a database. Attach one on DB Source, then browse tables."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
           {!hasConnection ? (
             <Link href={`${base}/db-source`} className={buttonVariants()}>
-              <Plug className="h-4 w-4" aria-hidden /> Connect a database
+              <Plug className="h-4 w-4" aria-hidden /> Attach a database
             </Link>
           ) : (
-            <Link href={`${base}/tables`} className={buttonVariants()}>
-              <Table2 className="h-4 w-4" aria-hidden /> Browse tables
-            </Link>
+            <>
+              <Link href={`${base}/tables`} className={buttonVariants()}>
+                <Table2 className="h-4 w-4" aria-hidden /> Browse tables
+              </Link>
+              <Link href={`${base}/connect`} className={buttonVariants({ variant: "outline" })}>
+                <Cable className="h-4 w-4" aria-hidden /> Connect your app
+              </Link>
+            </>
           )}
         </CardContent>
       </Card>
