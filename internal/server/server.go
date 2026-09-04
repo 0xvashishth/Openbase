@@ -120,14 +120,18 @@ type Adapter interface {
 
 // Server owns the HTTP route table.
 type Server struct {
-	mux  *http.ServeMux
-	svc  *Services
+	mux *http.ServeMux
+	svc *Services
+
+	// pkCache memoizes single-column primary-key resolution for id-based
+	// PUT/DELETE (see resolveRowKey). Per-Server so tests never share entries.
+	pkCache *rowKeyCache
 }
 
 // New builds a Server with all routes registered.
 func New(svc *Services) http.Handler {
 	mux := http.NewServeMux()
-	s := &Server{mux: mux, svc: svc}
+	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 
 	mux.HandleFunc("POST /v1/auth/register", s.register)
 	mux.HandleFunc("POST /v1/auth/login", s.login)

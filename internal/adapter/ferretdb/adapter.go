@@ -281,6 +281,19 @@ func buildFilter(f adapter.Filter) (bson.M, error) {
 		}
 		switch c.Operator {
 		case "", adapter.OpEqual:
+			// `_id` is stored as an ObjectID for generated ids but as a plain
+			// string for user-supplied ones, while callers (notably the public
+			// REST API) only ever have the hex string the insert returned.
+			// Match both forms so an id round-trips; anything else would be a
+			// silent zero-match on a valid id.
+			if c.Field == "_id" {
+				if s, ok := c.Value.(string); ok {
+					if oid, err := bson.ObjectIDFromHex(s); err == nil {
+						filter[c.Field] = bson.M{"$in": bson.A{oid, s}}
+						continue
+					}
+				}
+			}
 			filter[c.Field] = c.Value
 		case adapter.OpNotEqual:
 			filter[c.Field] = bson.M{"$ne": c.Value}
