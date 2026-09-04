@@ -1,16 +1,11 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useParams } from "next/navigation";
-import { ConnectionPanel } from "@/components/projects/ConnectionPanel";
-import { ProjectGuard } from "@/components/projects/ProjectGuard";
-
-export default function ConnectionPage() {
-  const params = useParams<{ projectId: string }>();
-  return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <ProjectGuard>
-        <ConnectionPanel projectId={params.projectId} />
-      </ProjectGuard>
-    </div>
-  );
+/** Legacy alias: the Connection tab was renamed to DB Source. */
+export default async function ConnectionAlias({
+  params,
+}: {
+  params: Promise<{ orgId: string; projectId: string }>;
+}) {
+  const { orgId, projectId } = await params;
+  redirect(`/orgs/${orgId}/projects/${projectId}/db-source`);
 }

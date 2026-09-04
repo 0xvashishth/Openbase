@@ -29,7 +29,7 @@ const TOOL_LABELS: Record<string, string> = {
   functions: "Functions",
   triggers: "Triggers",
   realtime: "Realtime",
-  connection: "Connection",
+  "db-source": "DB Source",
   settings: "Settings",
   members: "Members",
 };
@@ -55,7 +55,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   functions: "Serverless functions triggered by data events.",
   triggers: "When X happens on a table, run a function or webhook.",
   realtime: "Live WebSocket updates for native engines.",
-  connection: "Provision a database or connect your own.",
+  "db-source": "Provision a database or connect your own.",
   settings: "Project metadata and danger zone.",
   members: "People with access to this organization.",
 };

@@ -158,16 +158,16 @@ export function SchemaSkeleton({ label = "Loading schema" }: { label?: string })
   );
 }
 
-export function ConnectionSkeleton() {
+export function DBSourceSkeleton() {
   return (
-    <LoadingRegion label="Loading connection" className="space-y-6">
+    <LoadingRegion label="Loading DB source" className="space-y-6">
       <div className="space-y-3">
         <Skeleton className="h-4 w-40" />
         <div className="flex gap-2">
           <Skeleton className="h-8 w-36" />
           <Skeleton className="h-8 w-32" />
         </div>
-        <FormSkeleton label="Loading connection form" />
+        <FormSkeleton label="Loading DB source form" />
       </div>
       <div className="space-y-2">
         <Skeleton className="h-4 w-40" />

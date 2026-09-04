@@ -82,7 +82,7 @@ export function ProjectSidebar({
   }
 
   const locked = hasConnection === false;
-  const lockReason = "Connect a database first (Connection tab)";
+  const lockReason = "Connect a database first (DB Source tab)";
   const noTriggers = supportsTriggers === false ? "Engine has no native trigger support" : undefined;
   const noRealtime = supportsRealtime === false ? "Engine has no native realtime support" : undefined;
 
@@ -196,8 +196,8 @@ export function ProjectSidebar({
           </NavLink>
         </NavSection>
         <NavSection label="Configure" collapsed={collapsed}>
-          <NavLink href={href("connection")} active={isActive("connection")} icon={<Plug className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            Connection
+          <NavLink href={href("db-source")} active={isActive("db-source", ["connection"])} icon={<Plug className="h-3.5 w-3.5" />} collapsed={collapsed}>
+            DB Source
           </NavLink>
           <NavLink href={href("settings")} active={isActive("settings")} icon={<Settings className="h-3.5 w-3.5" />} collapsed={collapsed}>
             Settings

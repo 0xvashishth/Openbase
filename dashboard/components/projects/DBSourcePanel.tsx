@@ -13,7 +13,12 @@ import type { Connection } from "@/lib/types";
 type ConnectMode = "byodb" | "provisioned";
 type EngineChoice = "postgres" | "ferretdb";
 
-export function ConnectionPanel({ projectId }: { projectId: string }) {
+/**
+ * DB Source tab: attaches the project's *backing* database (inbound —
+ * platform → your DB). The outbound direction (your app → Openbase) lives in
+ * the Connect tab.
+ */
+export function DBSourcePanel({ projectId }: { projectId: string }) {
   const [conn, setConn] = useState<Connection | null | "loading">("loading");
   const [mode, setMode] = useState<ConnectMode>("byodb");
   const [engine, setEngine] = useState<EngineChoice>("postgres");

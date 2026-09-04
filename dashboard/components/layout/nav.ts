@@ -52,13 +52,15 @@ export const PROJECT_TOOLS = [
   "functions",
   "triggers",
   "realtime",
-  "connection",
+  "db-source",
+  "connection", // legacy alias for db-source
   "settings",
 ] as const;
 
 export function normalizeTool(tool: string | null): string {
   if (tool === "data") return "tables";
   if (tool === "api-keys") return "api";
+  if (tool === "connection") return "db-source";
   if (!tool) return "overview";
   return tool;
 }

@@ -60,8 +60,8 @@ export function ProjectGuard({
           hint={`${toolName} needs a connected database. Set one up, then come back.`}
           action={
             <Button asChild>
-              <Link href={`/orgs/${ctx.orgId}/projects/${ctx.projectId}/connection`}>
-                Go to Connection
+              <Link href={`/orgs/${ctx.orgId}/projects/${ctx.projectId}/db-source`}>
+                Go to DB Source
               </Link>
             </Button>
           }

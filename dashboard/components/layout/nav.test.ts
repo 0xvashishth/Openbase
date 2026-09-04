@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTool, parseRoute, projectToolPath } from "./nav";
+import { PROJECT_TOOLS, normalizeTool, parseRoute, projectToolPath } from "./nav";
 
 describe("parseRoute", () => {
   it("treats org list + global projects as platform scope", () => {
@@ -41,6 +41,14 @@ describe("projectToolPath + normalizeTool", () => {
   it("normalizes legacy aliases", () => {
     expect(normalizeTool("data")).toBe("tables");
     expect(normalizeTool("api-keys")).toBe("api");
+    expect(normalizeTool("connection")).toBe("db-source");
     expect(normalizeTool(null)).toBe("overview");
+  });
+
+  it("keeps db-source canonical and listed as a project tool", () => {
+    expect(normalizeTool("db-source")).toBe("db-source");
+    expect(PROJECT_TOOLS).toContain("db-source");
+    // legacy slug stays routable so old bookmarks redirect
+    expect(PROJECT_TOOLS).toContain("connection");
   });
 });

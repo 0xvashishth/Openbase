@@ -23,8 +23,8 @@ function SettingsBody() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href={`/orgs/${project.organization_id}/projects/${project.id}/connection`}>
-              Manage connection
+            <Link href={`/orgs/${project.organization_id}/projects/${project.id}/db-source`}>
+              Manage DB source
             </Link>
           </Button>
           <Button asChild variant="outline">
@@ -41,7 +41,7 @@ function SettingsBody() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Use the Connection tab to remove or replace the database. Project deletion via API.
+            Use the DB Source tab to remove or replace the database. Project deletion via API.
           </p>
         </CardContent>
       </Card>

@@ -51,7 +51,7 @@ function OverviewBody() {
         </CardHeader>
         <CardContent>
           {!hasConnection ? (
-            <Link href={`${base}/connection`} className={buttonVariants()}>
+            <Link href={`${base}/db-source`} className={buttonVariants()}>
               <Plug className="h-4 w-4" aria-hidden /> Connect a database
             </Link>
           ) : (

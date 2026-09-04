@@ -33,9 +33,9 @@ describe("ProjectGuard", () => {
       </ProjectGuard>
     );
     expect(screen.getByText(/connect a database first/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /go to connection/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /go to db source/i })).toHaveAttribute(
       "href",
-      "/orgs/o1/projects/p1/connection"
+      "/orgs/o1/projects/p1/db-source"
     );
   });
 

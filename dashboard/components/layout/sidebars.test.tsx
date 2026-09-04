@@ -13,7 +13,7 @@ describe("PlatformSidebar (no org selected)", () => {
     expect(screen.queryByText("Schema")).not.toBeInTheDocument();
     expect(screen.queryByText("Triggers")).not.toBeInTheDocument();
     expect(screen.queryByText("Realtime")).not.toBeInTheDocument();
-    expect(screen.queryByText("Connection")).not.toBeInTheDocument();
+    expect(screen.queryByText("DB Source")).not.toBeInTheDocument();
   });
 });
 
@@ -25,7 +25,7 @@ describe("OrgSidebar (org selected, no project)", () => {
     expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.queryByText("Tables")).not.toBeInTheDocument();
     expect(screen.queryByText("API Keys")).not.toBeInTheDocument();
-    expect(screen.queryByText("Connection")).not.toBeInTheDocument();
+    expect(screen.queryByText("DB Source")).not.toBeInTheDocument();
   });
 
   it("offers a back link to all organizations", () => {
@@ -78,5 +78,29 @@ describe("ProjectSidebar (project selected)", () => {
     );
     expect(screen.getByText("Triggers").getAttribute("title")).toMatch(/trigger/i);
     expect(screen.getByText("Realtime").getAttribute("title")).toMatch(/realtime/i);
+  });
+
+  it("links the renamed DB Source tab and never locks it", () => {
+    render(<ProjectSidebar {...base} hasConnection={false} currentPath="/orgs/o1/projects/p1" />);
+    expect(screen.queryByText("Connection")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /db source/i })).toHaveAttribute(
+      "href",
+      "/orgs/o1/projects/p1/db-source"
+    );
+  });
+
+  it("marks DB Source active on both the new and legacy paths", () => {
+    const { unmount } = render(
+      <ProjectSidebar {...base} hasConnection currentPath="/orgs/o1/projects/p1/db-source" />
+    );
+    expect(screen.getByRole("link", { name: /db source/i })).toHaveAttribute("aria-current", "page");
+    unmount();
+    render(<ProjectSidebar {...base} hasConnection currentPath="/orgs/o1/projects/p1/connection" />);
+    expect(screen.getByRole("link", { name: /db source/i })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("points the lock tooltip at the DB Source tab", () => {
+    render(<ProjectSidebar {...base} hasConnection={false} currentPath="/orgs/o1/projects/p1" />);
+    expect(screen.getByText("Tables").getAttribute("title")).toMatch(/db source/i);
   });
 });

@@ -13,6 +13,11 @@ describe("toolLabel", () => {
     expect(toolLabel(null)).toBe("Overview");
   });
 
+  it("labels the renamed DB Source tab (and its legacy slug)", () => {
+    expect(toolLabel("db-source")).toBe("DB Source");
+    expect(toolLabel("connection")).toBe("DB Source");
+  });
+
   it("capitalizes unknown tools", () => {
     expect(toolLabel("billing")).toBe("Billing");
   });
@@ -100,6 +105,8 @@ describe("toolDescription", () => {
     expect(toolDescription("tables")).toMatch(/browse collections/i);
     expect(toolDescription("data")).toMatch(/browse collections/i);
     expect(toolDescription("api-keys")).toMatch(/rest api/i);
+    expect(toolDescription("db-source")).toMatch(/provision a database/i);
+    expect(toolDescription("connection")).toMatch(/provision a database/i);
     expect(toolDescription(null)).toMatch(/status and shortcuts/i);
   });
 

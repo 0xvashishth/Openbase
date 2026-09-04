@@ -41,7 +41,7 @@ const PROJECT_TOOLS: { slug: string; label: string; icon: React.ReactNode }[] = 
   { slug: "functions", label: "Functions", icon: <Zap className="h-4 w-4" /> },
   { slug: "triggers", label: "Triggers", icon: <Database className="h-4 w-4" /> },
   { slug: "realtime", label: "Realtime", icon: <Radio className="h-4 w-4" /> },
-  { slug: "connection", label: "Connection", icon: <Plug className="h-4 w-4" /> },
+  { slug: "db-source", label: "DB Source", icon: <Plug className="h-4 w-4" /> },
   { slug: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
 ];
 

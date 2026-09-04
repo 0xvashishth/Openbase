@@ -40,7 +40,7 @@ export function CreateProjectForm({ orgId, onCreated }: { orgId: string; onCreat
       </div>
       <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
         After creation you&apos;ll pick a database engine (provisioned or
-        bring-your-own) on the Connection tab.
+        bring-your-own) on the DB Source tab.
       </p>
       <Button type="submit" loading={loading}>
         Create project
