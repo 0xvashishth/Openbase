@@ -62,6 +62,17 @@ BYODB mode additionally accepts connection strings to **any** database the adapt
 7. **Phase 6** — BYODB hardening (core flow pulled forward into Phase 1) (complete)
 8. **Phase 7** — Remaining adapters (Valkey ✅, MySQL ✅, Qdrant ✅, ArcadeDB ✅, Chroma) + polish (in progress — Valkey, MySQL, Qdrant, ArcadeDB, function-sandbox hardening done)
 
+**Part II — Supabase parity (Phases 8–18, planned).** Phases 0–7 built the part Supabase doesn't
+have: a capability-honest six-engine adapter layer. Part II closes the gap on what Supabase does
+have, audited feature-by-feature against its published catalogue. In dependency order: **8** remediation
+(live defects, RBAC/scope enforcement, connection pooling), **9** platform accounts & orgs (sessions,
+email, MFA, invites, audit log), **10** end-user auth per project (the GoTrue equivalent — the largest
+structural gap), **11** authorization/RLS equivalent (native pushdown for Postgres+MySQL,
+platform-side enforcement for the rest), **12** data-API parity + client SDKs, **13** table editor &
+DDL, **14** storage, **15** functions v2 + cron + queues, **16** realtime v2 (broadcast, presence,
+polling tier), **17** observability & advisors, **18** backups, migrations, branching, CLI.
+See `PHASES.md` Part II for the per-step plan and the full gap inventory.
+
 > **Status:** Phases 0–6 are **complete** (API + metadata store + auth + encryption + Next.js
 > dashboard; Postgres + FerretDB adapters with provisioned + BYODB modes; a React Flow schema
 > explorer diagramming tables & FK relationships, capability-gated; per-project API keys powering an
