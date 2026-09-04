@@ -6,7 +6,12 @@ const mockUseProject = vi.fn();
 
 vi.mock("@/lib/project-context", () => ({ useProject: () => mockUseProject() }));
 vi.mock("@/lib/api", () => ({
-  api: { listAPIKeys: vi.fn(), createAPIKey: vi.fn(), getConnectInfo: vi.fn() },
+  api: {
+    listAPIKeys: vi.fn(),
+    createAPIKey: vi.fn(),
+    getConnectInfo: vi.fn(),
+    listCollections: vi.fn(),
+  },
 }));
 vi.mock("@/components/AuthProvider", () => ({ authToken: () => "tok" }));
 
@@ -44,12 +49,18 @@ const connectInfo: ConnectInfo = {
   active_api_keys: 0,
 };
 
+/** The client-library tab panel (the only one rendered by Radix at a time). */
+function snippetPanel() {
+  return screen.getByRole("tabpanel");
+}
+
 describe("ConnectPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseProject.mockReturnValue(ctx);
     vi.mocked(api.listAPIKeys).mockResolvedValue([]);
     vi.mocked(api.getConnectInfo).mockResolvedValue(connectInfo);
+    vi.mocked(api.listCollections).mockResolvedValue([]);
     Object.defineProperty(window, "location", {
       value: { origin: "https://dash.example.com" },
       writable: true,
@@ -77,10 +88,56 @@ describe("ConnectPanel", () => {
     expect(screen.getByText("Authorization: Bearer ob_...")).toBeInTheDocument();
   });
 
+  it("offers every client language as a tab", async () => {
+    render(<ConnectPanel projectId="p1" />);
+    for (const label of ["cURL", "JavaScript", "TypeScript / Next.js", "Python", "Go"]) {
+      expect(await screen.findByRole("tab", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("switches between language snippets", async () => {
+    const user = userEvent.setup();
+    render(<ConnectPanel projectId="p1" />);
+    await screen.findByRole("tab", { name: "cURL" });
+    expect(snippetPanel()).toHaveTextContent("curl");
+
+    await user.click(screen.getByRole("tab", { name: "Python" }));
+    expect(snippetPanel()).toHaveTextContent("import httpx");
+
+    await user.click(screen.getByRole("tab", { name: "Go" }));
+    expect(snippetPanel()).toHaveTextContent("os.Getenv");
+
+    await user.click(screen.getByRole("tab", { name: "TypeScript / Next.js" }));
+    expect(snippetPanel()).toHaveTextContent("lib/openbase.ts");
+  });
+
+  it("uses a real table name in snippets when collections are known", async () => {
+    vi.mocked(api.listCollections).mockResolvedValue([{ name: "orders" }, { name: "users" }] as never);
+    render(<ConnectPanel projectId="p1" />);
+    await waitFor(() => expect(snippetPanel()).toHaveTextContent("/v1/api/orders"));
+    expect(screen.queryByText(/replace your_table/i)).not.toBeInTheDocument();
+  });
+
+  it("lets the user pick which table the snippets use", async () => {
+    vi.mocked(api.listCollections).mockResolvedValue([{ name: "orders" }, { name: "users" }] as never);
+    const user = userEvent.setup();
+    render(<ConnectPanel projectId="p1" />);
+    const picker = await screen.findByLabelText("Example table");
+    await user.selectOptions(picker, "users");
+    expect(snippetPanel()).toHaveTextContent("/v1/api/users");
+  });
+
+  it("falls back to a placeholder table with a hint when no collections load", async () => {
+    render(<ConnectPanel projectId="p1" />);
+    await waitFor(() => expect(snippetPanel()).toHaveTextContent("your_table"));
+    expect(screen.getByText(/replace/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Example table")).not.toBeInTheDocument();
+  });
+
   it("uses a placeholder key until one is created", async () => {
     render(<ConnectPanel projectId="p1" />);
     expect(await screen.findByText(/no active keys yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("ob_your_api_key");
+    expect(snippetPanel()).toHaveTextContent("ob_your_api_key");
   });
 
   it("reports the server's active key count", async () => {
@@ -98,20 +155,37 @@ describe("ConnectPanel", () => {
 
     await waitFor(() => expect(api.createAPIKey).toHaveBeenCalledWith("tok", "p1", "connect-quickstart"));
     expect(await screen.findByText("ob_live_key")).toBeInTheDocument();
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("Bearer ob_live_key");
+    expect(snippetPanel()).toHaveTextContent("Bearer ob_live_key");
   });
 
-  it("switches snippet languages", async () => {
-    const user = userEvent.setup();
+  it("warns that the key must stay server-side", async () => {
     render(<ConnectPanel projectId="p1" />);
-    await screen.findByRole("tab", { name: "cURL" });
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("curl");
+    expect(await screen.findByText(/keep the key server-side/i)).toBeInTheDocument();
+    expect(screen.getByText(/OPENBASE_API_KEY=ob_your_api_key/)).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("tab", { name: "JavaScript" }));
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("OPENBASE_URL");
+  it("shows a realtime snippet for native engines", async () => {
+    render(<ConnectPanel projectId="p1" />);
+    expect(await screen.findByRole("button", { name: "Copy Realtime example" })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("tab", { name: "Realtime" }));
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("wss://api.example.com/v1/realtime");
+  it("replaces the realtime snippet with an honest empty state when unsupported", async () => {
+    vi.mocked(api.getConnectInfo).mockResolvedValue({ ...connectInfo, supports_realtime: "polling" });
+    render(<ConnectPanel projectId="p1" />);
+    expect(await screen.findByText(/realtime unavailable on this engine/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy Realtime example" })).not.toBeInTheDocument();
+    expect(screen.getByText(/no native change stream/i)).toBeInTheDocument();
+  });
+
+  it("explains ORM access for a bring-your-own database", async () => {
+    render(<ConnectPanel projectId="p1" />);
+    expect(await screen.findByText(/bring-your-own database/i)).toBeInTheDocument();
+  });
+
+  it("explains that provisioned credentials stay server-side", async () => {
+    vi.mocked(api.getConnectInfo).mockResolvedValue({ ...connectInfo, mode: "provisioned" });
+    render(<ConnectPanel projectId="p1" />);
+    expect(await screen.findByText(/does not expose them/i)).toBeInTheDocument();
   });
 
   it("points at DB Source when the project has no database", async () => {
@@ -119,6 +193,7 @@ describe("ConnectPanel", () => {
       ...connectInfo,
       has_connection: false,
       engine: undefined,
+      mode: undefined,
       status: undefined,
       supports_realtime: undefined,
     });
@@ -129,12 +204,6 @@ describe("ConnectPanel", () => {
       "href",
       "/orgs/o1/projects/p1/db-source"
     );
-  });
-
-  it("flags engines without native realtime using server capabilities", async () => {
-    vi.mocked(api.getConnectInfo).mockResolvedValue({ ...connectInfo, supports_realtime: "polling" });
-    render(<ConnectPanel projectId="p1" />);
-    expect(await screen.findByText(/no native change stream/i)).toBeInTheDocument();
   });
 
   it("surfaces key-loading failures without breaking the page", async () => {
