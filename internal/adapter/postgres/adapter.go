@@ -27,7 +27,7 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
-// Compile-time assertion that Adapter supports raw read-only SQL.
+// Compile-time assertion that Adapter supports raw SQL (reads + writes/DDL).
 var _ adapter.RawQuerier = (*Adapter)(nil)
 
 // New returns a Postgres adapter with no live connection yet.
@@ -263,9 +263,12 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 	return result, rows.Err()
 }
 
-// ExecRaw executes a read-only raw SQL statement (SELECT/WITH/EXPLAIN).
-// Write-guard validation lives in the server handler; this method caps rows
-// at adapter.MaxRawRows so a runaway SELECT can't exhaust host memory.
+// ExecRaw executes a raw SQL statement — reads (SELECT/WITH/EXPLAIN) as well
+// as DML (INSERT/UPDATE/DELETE) and DDL (CREATE/ALTER/DROP/TRUNCATE, ...).
+// Write-guard validation lives in the server handler; this method caps read
+// rows at adapter.MaxRawRows so a runaway SELECT can't exhaust host memory.
+// Writes return a single-row ResultSet: DML yields {"affected_rows": N}
+// (plus RETURNING rows when present), DDL yields {"result": "OK"}.
 func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
 	if err := a.requirePool(); err != nil {
 		return adapter.ResultSet{}, err
@@ -301,7 +304,28 @@ func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet,
 		}
 		result.Rows = append(result.Rows, row)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("postgres: exec raw: %w", err)
+	}
+	// No columns and no rows means the statement was a write/DDL executed
+	// via the Query path (e.g. INSERT without RETURNING, CREATE TABLE).
+	// Surface the command tag as an affected_rows / OK row so the SQL editor
+	// can render writes instead of a confusing "0 rows".
+	if len(cols) == 0 && len(result.Rows) == 0 {
+		tag := rows.CommandTag()
+		affected := tag.RowsAffected()
+		if affected != 0 {
+			return adapter.ResultSet{
+				Columns: []string{"affected_rows"},
+				Rows:    []map[string]any{{"affected_rows": affected}},
+			}, nil
+		}
+		return adapter.ResultSet{
+			Columns: []string{"result"},
+			Rows:    []map[string]any{{"result": "OK"}},
+		}, nil
+	}
+	return result, nil
 }
 
 func buildWhere(collection string, f adapter.Filter) (string, []any, error) {

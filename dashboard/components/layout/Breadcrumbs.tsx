@@ -51,7 +51,7 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   overview: "Project status and shortcuts.",
   tables: "Browse collections and rows — like Supabase's table editor.",
   schema: "Visual tables and relationships.",
-  sql: "Run read-only queries with syntax highlighting.",
+  sql: "Run reads and writes in your database's own language.",
   api: "Keys for your auto-generated REST API.",
   functions: "Serverless functions triggered by data events.",
   triggers: "When X happens on a table, run a function or webhook.",

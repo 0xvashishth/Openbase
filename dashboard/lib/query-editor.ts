@@ -1,7 +1,8 @@
 /**
  * Engine-aware query editor configuration.
- * SQL engines get raw execution; NoSQL engines get the platform query
- * builder with a native-syntax preview (honest: no fake raw execution).
+ * Every engine supports raw execution now: SQL engines run SQL directly
+ * (reads + DML/DDL), FerretDB runs mongo-shell commands, Valkey runs Redis
+ * commands, ArcadeDB runs its SQL, and Qdrant runs SCROLL/SEARCH/UPSERT/etc.
  */
 
 export type EditorKind = "sql" | "mongo" | "redis" | "arcade" | "vector" | "generic";
@@ -15,7 +16,7 @@ export interface EngineEditorConfig {
   rawNote: string;
 }
 
-const SQL_SAMPLE = `-- Read-only: SELECT / WITH / EXPLAIN (max 200 rows, 15s timeout)
+const SQL_SAMPLE = `-- Reads + writes/DDL (one statement, max 200 rows, 15s timeout)
 SELECT * FROM users LIMIT 25;`;
 
 const CONFIGS: Record<string, EngineEditorConfig> = {
@@ -25,7 +26,7 @@ const CONFIGS: Record<string, EngineEditorConfig> = {
     placeholder: "SELECT * FROM users LIMIT 25;",
     sample: SQL_SAMPLE,
     supportsRaw: true,
-    rawNote: "Runs directly on Postgres (read-only).",
+    rawNote: "Runs directly on Postgres — SELECT plus INSERT/UPDATE/DELETE/DDL.",
   },
   mysql: {
     kind: "sql",
@@ -33,47 +34,57 @@ const CONFIGS: Record<string, EngineEditorConfig> = {
     placeholder: "SELECT * FROM users LIMIT 25;",
     sample: SQL_SAMPLE,
     supportsRaw: true,
-    rawNote: "Runs directly on MySQL (read-only).",
+    rawNote: "Runs directly on MySQL — SELECT plus INSERT/UPDATE/DELETE/DDL.",
   },
   ferretdb: {
     kind: "mongo",
     languageLabel: "MongoDB (FerretDB)",
-    placeholder: '{ "status": "active" }',
-    sample: `// FerretDB: Mongo-wire preview: db.users.find({ status: "active" })
-// Run executes via the platform query API — edit the JSON filter below.
-{ "status": "active" }`,
-    supportsRaw: false,
-    rawNote: "Raw mongo shell isn't executed server-side yet — use collection + filter JSON.",
+    placeholder: 'db.users.find({ "status": "active" })',
+    sample: `// FerretDB: mongo-shell — reads + writes (max 200 rows, 15s timeout)
+db.users.find({ "status": "active" })
+// db.users.insertOne({ "status": "active", "name": "Ada" })
+// db.users.updateMany({ "status": "active" }, { "$set": { "tier": "pro" } })
+// db.users.deleteOne({ "name": "Ada" })`,
+    supportsRaw: true,
+    rawNote: "Runs mongo-shell commands directly — find/insert/update/delete/drop.",
   },
   valkey: {
     kind: "redis",
     languageLabel: "Valkey (Redis)",
-    placeholder: '{ "status": "active" }',
-    sample: `// Valkey: collections are JSON-doc sets.
-// Run executes via the platform query API — edit the JSON filter below.
-{ "status": "active" }`,
-    supportsRaw: false,
-    rawNote: "Raw Redis commands aren't executed server-side yet — use the builder.",
+    placeholder: "KEYS *",
+    sample: `// Valkey: raw Redis commands — reads + writes (one per line, last result shown)
+KEYS *
+// SET users:1 '{"name": "Ada"}'
+// GET users:1
+// HSET users:1 name Ada
+// DEL users:1`,
+    supportsRaw: true,
+    rawNote: "Runs Redis commands directly — GET/SET/HSET/DEL/KEYS and more.",
   },
   arcadedb: {
     kind: "arcade",
     languageLabel: "ArcadeDB SQL",
-    placeholder: '{ "name": "Alice" }',
-    sample: `// ArcadeDB speaks SQL over HTTP (e.g. SELECT * FROM Person LIMIT 25).
-// Run executes via the platform query API — edit the JSON filter below.
-{}`,
-    supportsRaw: false,
-    rawNote: "Raw ArcadeDB SQL runs through the query builder for now.",
+    placeholder: "SELECT FROM Person LIMIT 25",
+    sample: `-- ArcadeDB SQL — reads + writes/DDL (max 200 rows, 15s timeout)
+SELECT FROM Person LIMIT 25
+-- INSERT INTO Person SET name = 'Ada'
+-- UPDATE Person SET tier = 'pro' WHERE name = 'Ada'
+-- DELETE FROM Person WHERE name = 'Ada'`,
+    supportsRaw: true,
+    rawNote: "Runs ArcadeDB SQL directly — SELECT via query API, writes/DDL via command API.",
   },
   qdrant: {
     kind: "vector",
-    languageLabel: "Qdrant (payload filter)",
-    placeholder: '{ "status": "active" }',
-    sample: `// Qdrant: points surface as rows; payload fields are columns.
-// Run executes via the platform query API with this payload filter.
-{ "status": "active" }`,
-    supportsRaw: false,
-    rawNote: "Vector similarity search is roadmap — payload filtering works today.",
+    languageLabel: "Qdrant",
+    placeholder: 'SCROLL mycol {"limit": 25}',
+    sample: `// Qdrant: SCROLL/SEARCH/UPSERT/DELETE/CREATE/DROP (max 200 rows, 15s timeout)
+SCROLL mycol {"limit": 25}
+// SEARCH mycol {"vector": [0.1, 0.2, 0.3], "limit": 5}
+// UPSERT mycol [{"id": 1, "vector": [0.1, 0.2, 0.3], "payload": {"name": "Ada"}}]
+// DELETE mycol {"filter": {"must": [{"key": "name", "match": "Ada"}]}}
+// CREATE mycol {"vectors": {"size": 3, "distance": "Cosine"}}`,
+    supportsRaw: true,
+    rawNote: "Runs Qdrant SCROLL/SEARCH/UPSERT/DELETE/CREATE/DROP directly.",
   },
 };
 

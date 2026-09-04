@@ -168,6 +168,108 @@ func TestUnsupportedMethodsReturnErrUnsupported(t *testing.T) {
 	}
 }
 
+func TestExecRawMongoShellReadsAndWrites(t *testing.T) {
+	a := newAdapter(t)
+	ctx := context.Background()
+
+	// insertOne returns the generated _id.
+	rs, err := a.ExecRaw(ctx, `db.raw_items.insertOne({ "name": "widget", "qty": 2 })`)
+	if err != nil {
+		t.Fatalf("insertOne: %v", err)
+	}
+	if len(rs.Rows) != 1 || rs.Rows[0]["inserted_id"] == nil {
+		t.Fatalf("insertOne result = %+v, want inserted_id", rs.Rows)
+	}
+
+	// insertMany reports how many landed.
+	rs, err = a.ExecRaw(ctx, `db.raw_items.insertMany([{ "name": "gadget", "qty": 5 }, { "name": "doohickey", "qty": 9 }])`)
+	if err != nil {
+		t.Fatalf("insertMany: %v", err)
+	}
+	if got := num(rs.Rows[0]["inserted_count"]); got != 2 {
+		t.Fatalf("inserted_count = %v, want 2", rs.Rows[0]["inserted_count"])
+	}
+
+	// find with a filter + chained sort/limit.
+	rs, err = a.ExecRaw(ctx, `db.raw_items.find({ "qty": { "$gte": 5 } }).sort({ "qty": -1 }).limit(1)`)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if len(rs.Rows) != 1 || rs.Rows[0]["name"] != "doohickey" {
+		t.Fatalf("find rows = %+v, want doohickey", rs.Rows)
+	}
+
+	// A bare document update is wrapped in $set (shell-friendly).
+	rs, err = a.ExecRaw(ctx, `db.raw_items.updateMany({ "qty": { "$gte": 5 } }, { "tier": "pro" })`)
+	if err != nil {
+		t.Fatalf("updateMany: %v", err)
+	}
+	if got := num(rs.Rows[0]["modified_count"]); got != 2 {
+		t.Fatalf("modified_count = %v, want 2", rs.Rows[0]["modified_count"])
+	}
+	rs, err = a.ExecRaw(ctx, `db.raw_items.find({ "tier": "pro" })`)
+	if err != nil {
+		t.Fatalf("find after update: %v", err)
+	}
+	if len(rs.Rows) != 2 {
+		t.Fatalf("update did not persist: %+v", rs.Rows)
+	}
+
+	// countDocuments + deleteOne/deleteMany.
+	rs, err = a.ExecRaw(ctx, `db.raw_items.countDocuments({})`)
+	if err != nil {
+		t.Fatalf("countDocuments: %v", err)
+	}
+	if got := num(rs.Rows[0]["count"]); got != 3 {
+		t.Fatalf("count = %v, want 3", rs.Rows[0]["count"])
+	}
+	rs, err = a.ExecRaw(ctx, `db.raw_items.deleteOne({ "name": "widget" })`)
+	if err != nil {
+		t.Fatalf("deleteOne: %v", err)
+	}
+	if got := num(rs.Rows[0]["deleted_count"]); got != 1 {
+		t.Fatalf("deleted_count = %v, want 1", rs.Rows[0]["deleted_count"])
+	}
+
+	// The JSON command form is equivalent to the shell form.
+	rs, err = a.ExecRaw(ctx, `{"collection": "raw_items", "op": "find", "filter": {"tier": "pro"}, "limit": 5}`)
+	if err != nil {
+		t.Fatalf("json find: %v", err)
+	}
+	if len(rs.Rows) != 2 {
+		t.Fatalf("json find rows = %+v, want 2", rs.Rows)
+	}
+
+	// drop clears the collection.
+	if _, err := a.ExecRaw(ctx, `db.raw_items.drop()`); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	rs, err = a.ExecRaw(ctx, `db.raw_items.countDocuments({})`)
+	if err != nil {
+		t.Fatalf("count after drop: %v", err)
+	}
+	if got := num(rs.Rows[0]["count"]); got != 0 {
+		t.Fatalf("count after drop = %v, want 0", rs.Rows[0]["count"])
+	}
+}
+
+func TestExecRawRejectsBadInput(t *testing.T) {
+	a := newAdapter(t)
+	ctx := context.Background()
+
+	for _, q := range []string{
+		"   ",
+		"SELECT * FROM raw_items",     // not mongo shell
+		`db.raw_items.find({ "a": 1 `, // unbalanced
+		`db.raw_items.frobnicate({})`, // unknown op
+		`db.raw_items.updateOne({})`,  // missing update doc
+	} {
+		if _, err := a.ExecRaw(ctx, q); err == nil {
+			t.Errorf("expected error for %q", q)
+		}
+	}
+}
+
 func containsCol(cols []string, want string) bool {
 	for _, c := range cols {
 		if c == want {

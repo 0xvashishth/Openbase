@@ -28,6 +28,9 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
+// Compile-time assertion that Adapter supports raw Redis command execution.
+var _ adapter.RawQuerier = (*Adapter)(nil)
+
 // New returns a Valkey adapter with no live connection yet.
 func New() *Adapter {
 	return &Adapter{}
@@ -392,6 +395,286 @@ func (a *Adapter) Delete(ctx context.Context, filter adapter.Filter) (adapter.De
 		return adapter.DeleteResult{}, fmt.Errorf("valkey: delete: %w", err)
 	}
 	return adapter.DeleteResult{DeletedCount: removed}, nil
+}
+
+// ExecRaw executes raw Valkey/Redis commands (GET/SET/HSET/DEL/KEYS/...
+// anything the server speaks) via a direct Do. One command per line; "//",
+// "--" and "#" comment lines and blanks are ignored. Multiple commands run
+// sequentially and the last result is returned. Results map to a ResultSet:
+// scalars -> {"result": v}, arrays -> {"value": each}, maps -> columns=keys.
+func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if err := a.requireConnected(); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	lines := splitRawLines(query)
+	if len(lines) == 0 {
+		return adapter.ResultSet{}, fmt.Errorf("valkey: query is required")
+	}
+	var last adapter.ResultSet
+	for _, line := range lines {
+		args, err := tokenizeRedis(line)
+		if err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("valkey: %w", err)
+		}
+		if len(args) == 0 {
+			continue
+		}
+		iface := make([]any, len(args))
+		for i, s := range args {
+			iface[i] = s
+		}
+		val, err := a.client.Do(ctx, iface...).Result()
+		if err != nil {
+			if err == redis.Nil {
+				last = adapter.ResultSet{
+					Columns: []string{"result"},
+					Rows:    []map[string]any{{"result": nil}},
+				}
+				continue
+			}
+			return adapter.ResultSet{}, fmt.Errorf("valkey: exec raw (%q): %w", args[0], err)
+		}
+		last = redisValueToResult(args[0], val)
+	}
+	if last.Columns == nil {
+		last.Columns = []string{}
+	}
+	if last.Rows == nil {
+		last.Rows = []map[string]any{}
+	}
+	return last, nil
+}
+
+// splitRawLines returns executable command lines, dropping blanks and
+// full-line comments (//, --, #, /* */).
+func splitRawLines(q string) []string {
+	var out []string
+	for _, line := range strings.Split(q, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" {
+			continue
+		}
+		if strings.HasPrefix(t, "//") || strings.HasPrefix(t, "--") || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if strings.HasPrefix(t, "/*") && strings.HasSuffix(t, "*/") {
+			continue
+		}
+		// Inline "//" comments (editor samples) — strip when outside quotes.
+		if idx := commentIndex(t); idx >= 0 {
+			t = strings.TrimSpace(t[:idx])
+			if t == "" {
+				continue
+			}
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// commentIndex returns the index of an inline "//" outside quotes, or -1.
+func commentIndex(s string) int {
+	var inSingle, inDouble bool
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inSingle {
+			if c == '\'' {
+				inSingle = false
+			}
+			continue
+		}
+		if inDouble {
+			if c == '\\' && i+1 < len(s) {
+				i++
+				continue
+			}
+			if c == '"' {
+				inDouble = false
+			}
+			continue
+		}
+		if c == '\'' {
+			inSingle = true
+			continue
+		}
+		if c == '"' {
+			inDouble = true
+			continue
+		}
+		if c == '/' && i+1 < len(s) && s[i+1] == '/' {
+			return i
+		}
+	}
+	return -1
+}
+
+// tokenizeRedis splits a command line on whitespace outside single/double
+// quotes (redis-cli style). Surrounding quotes are stripped; backslash
+// escapes work inside double quotes.
+func tokenizeRedis(line string) ([]string, error) {
+	var (
+		out      []string
+		cur      strings.Builder
+		inSingle bool
+		inDouble bool
+		hasToken bool
+	)
+	flush := func() {
+		if hasToken {
+			out = append(out, cur.String())
+			cur.Reset()
+			hasToken = false
+		}
+	}
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if inSingle {
+			hasToken = true
+			if c == '\'' {
+				inSingle = false
+			} else {
+				cur.WriteByte(c)
+			}
+			continue
+		}
+		if inDouble {
+			hasToken = true
+			if c == '\\' && i+1 < len(line) {
+				i++
+				cur.WriteByte(line[i])
+				continue
+			}
+			if c == '"' {
+				inDouble = false
+			} else {
+				cur.WriteByte(c)
+			}
+			continue
+		}
+		switch {
+		case c == '\'':
+			inSingle = true
+			hasToken = true
+		case c == '"':
+			inDouble = true
+			hasToken = true
+		case c == ' ' || c == '\t' || c == '\r':
+			flush()
+		default:
+			cur.WriteByte(c)
+			hasToken = true
+		}
+	}
+	if inSingle || inDouble {
+		return nil, fmt.Errorf("unterminated quote in %q", line)
+	}
+	flush()
+	return out, nil
+}
+
+// redisValueToResult normalizes a go-redis Do result into a ResultSet.
+func redisValueToResult(cmd string, val any) adapter.ResultSet {
+	_ = cmd
+	switch v := val.(type) {
+	case nil:
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": nil}}}
+	case string:
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": v}}}
+	case int64:
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": v}}}
+	case int:
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": int64(v)}}}
+	case bool:
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": v}}}
+	case []any:
+		cols := []string{"value"}
+		rows := make([]map[string]any, 0, len(v))
+		for _, e := range v {
+			if len(rows) >= adapter.MaxRawRows {
+				break
+			}
+			rows = append(rows, map[string]any{"value": normalizeRedisScalar(e)})
+		}
+		if rows == nil {
+			rows = []map[string]any{}
+		}
+		return adapter.ResultSet{Columns: cols, Rows: rows}
+	case []string:
+		rows := make([]map[string]any, 0, len(v))
+		for _, e := range v {
+			if len(rows) >= adapter.MaxRawRows {
+				break
+			}
+			rows = append(rows, map[string]any{"value": e})
+		}
+		if rows == nil {
+			rows = []map[string]any{}
+		}
+		return adapter.ResultSet{Columns: []string{"value"}, Rows: rows}
+	case map[string]string:
+		cols := make([]string, 0, len(v))
+		row := make(map[string]any, len(v))
+		for k, s := range v {
+			cols = append(cols, k)
+			row[k] = s
+		}
+		sort.Strings(cols)
+		return adapter.ResultSet{Columns: cols, Rows: []map[string]any{row}}
+	case map[string]any:
+		cols := make([]string, 0, len(v))
+		for k := range v {
+			cols = append(cols, k)
+		}
+		sort.Strings(cols)
+		return adapter.ResultSet{Columns: cols, Rows: []map[string]any{v}}
+	case map[any]any:
+		cols := make([]string, 0, len(v))
+		row := make(map[string]any, len(v))
+		for k, e := range v {
+			ks := fmt.Sprint(k)
+			cols = append(cols, ks)
+			row[ks] = normalizeRedisScalar(e)
+		}
+		sort.Strings(cols)
+		return adapter.ResultSet{Columns: cols, Rows: []map[string]any{row}}
+	default:
+		// Slices of other shapes (e.g. []map) via reflection-free fallback.
+		if b, err := json.Marshal(v); err == nil {
+			var arr []any
+			if err := json.Unmarshal(b, &arr); err == nil {
+				rows := make([]map[string]any, 0, len(arr))
+				for _, e := range arr {
+					if len(rows) >= adapter.MaxRawRows {
+						break
+					}
+					rows = append(rows, map[string]any{"value": e})
+				}
+				return adapter.ResultSet{Columns: []string{"value"}, Rows: rows}
+			}
+			var obj map[string]any
+			if err := json.Unmarshal(b, &obj); err == nil {
+				cols := make([]string, 0, len(obj))
+				for k := range obj {
+					cols = append(cols, k)
+				}
+				sort.Strings(cols)
+				return adapter.ResultSet{Columns: cols, Rows: []map[string]any{obj}}
+			}
+			return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": string(b)}}}
+		}
+		return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": fmt.Sprint(v)}}}
+	}
+}
+
+func normalizeRedisScalar(v any) any {
+	switch t := v.(type) {
+	case []byte:
+		return string(t)
+	case string, int64, int, float64, bool, nil:
+		return t
+	default:
+		return fmt.Sprint(t)
+	}
 }
 
 // RegisterTrigger is unsupported: Valkey has no native trigger machinery.

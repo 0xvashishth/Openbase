@@ -100,6 +100,23 @@ func (c *Conn) RegisterRealtimeBroadcast(ctx context.Context, collection string)
 	return c.Adapter.RegisterRealtimeBroadcast(ctx, collection)
 }
 
+// ExecRaw forwards raw query execution to the underlying adapter when it
+// supports adapter.RawQuerier. This is what makes POST /sql work: without
+// this forwarder the server's type-assertion on the Conn wrapper always
+// failed (even for postgres), surfacing "raw SQL is only supported..." for
+// every engine. Engines without raw support return ErrUnsupported so the
+// server can report an honest 400.
+func (c *Conn) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if c.Adapter == nil {
+		return adapter.ResultSet{}, adapter.ErrUnsupported
+	}
+	raw, ok := c.Adapter.(adapter.RawQuerier)
+	if !ok {
+		return adapter.ResultSet{}, adapter.ErrUnsupported
+	}
+	return raw.ExecRaw(ctx, query)
+}
+
 // Factory resolves and connects adapters, mirroring the server AdapterFactory
 // contract while returning the full DatabaseAdapter for feature use.
 type Factory struct{}

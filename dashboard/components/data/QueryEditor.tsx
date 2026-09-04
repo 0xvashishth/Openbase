@@ -12,11 +12,9 @@ import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/feedback";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { normalizeNames, normalizeResultSet } from "@/lib/schema";
+import { normalizeResultSet } from "@/lib/schema";
 import { editorConfigFor, loadHistory, saveHistory } from "@/lib/query-editor";
 import { cellText } from "@/components/data/TableBrowser";
 import type { ResultSet } from "@/lib/types";
@@ -35,27 +33,6 @@ function extensionsFor(kind: string) {
   }
 }
 
-/** Parse a flat JSON object into equality conditions for /query. */
-export function parseFilterJson(raw: string): { field: string; operator: string; value: unknown }[] {
-  const t = stripLineComments(raw).trim();
-  if (!t) return [];
-  const obj = JSON.parse(t);
-  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error("Filter must be a JSON object, e.g. { \"status\": \"active\" }");
-  }
-  return Object.entries(obj).map(([field, value]) => ({ field, operator: "eq", value }));
-}
-
-function stripLineComments(s: string): string {
-  return s
-    .split("\n")
-    .map((line) => {
-      const idx = line.indexOf("//");
-      return idx >= 0 ? line.slice(0, idx) : line;
-    })
-    .join("\n");
-}
-
 export function QueryEditor({ projectId, engine }: { projectId: string; engine: string | null }) {
   const cfg = editorConfigFor(engine);
   const { resolvedTheme } = useTheme();
@@ -63,8 +40,6 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
   useEffect(() => setMounted(true), []);
 
   const [query, setQuery] = useState(cfg.sample);
-  const [collections, setCollections] = useState<string[]>([]);
-  const [collection, setCollection] = useState("");
   const [result, setResult] = useState<ResultSet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -78,16 +53,6 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
 
   useEffect(() => {
     setHistory(loadHistory(projectId));
-    const token = authToken();
-    if (!token) return;
-    api
-      .listCollections(token, projectId)
-      .then((cols) => {
-        const names = normalizeNames(cols);
-        setCollections(names);
-        if (names.length > 0) setCollection((c) => c || names[0]);
-      })
-      .catch(() => {});
   }, [projectId]);
 
   const extensions = useMemo(() => extensionsFor(cfg.kind), [cfg.kind]);
@@ -106,14 +71,9 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
     setError(null);
     const started = performance.now();
     try {
-      let rs;
-      if (cfg.supportsRaw) {
-        rs = await api.execSQL(token, projectId, query);
-      } else {
-        if (!collection) throw new Error("Pick a collection first.");
-        const conditions = parseFilterJson(query);
-        rs = await api.queryRows(token, projectId, { collection, conditions, limit: 200 });
-      }
+      // Every engine supports raw execution now (SQL, mongo-shell, Redis
+      // commands, ArcadeDB SQL, Qdrant DSL) — reads plus DML/DDL writes.
+      const rs = await api.execSQL(token, projectId, query);
       setResult(normalizeResultSet(rs));
       setElapsed(Math.round(performance.now() - started));
       setHistory(saveHistory(projectId, query));
@@ -124,7 +84,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
     } finally {
       setRunning(false);
     }
-  }, [query, cfg.supportsRaw, collection, projectId]);
+  }, [query, projectId]);
 
   return (
     <div className="space-y-4">
@@ -137,34 +97,6 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
           </Badge>
         )}
       </div>
-
-      {!cfg.supportsRaw && (
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <Label htmlFor="qe-collection">Collection</Label>
-            {collections.length > 0 ? (
-              <select
-                id="qe-collection"
-                value={collection}
-                onChange={(e) => setCollection(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {collections.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            ) : (
-              <Input
-                id="qe-collection"
-                placeholder="collection name"
-                value={collection}
-                onChange={(e) => setCollection(e.target.value)}
-                className="w-48"
-              />
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="overflow-hidden rounded-lg border border-border">
         <CodeMirror
@@ -183,7 +115,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
           <Play className="h-4 w-4" aria-hidden /> Run
         </Button>
         <span className="text-xs text-muted-foreground">
-          {cfg.supportsRaw ? "Read-only SELECT/WITH/EXPLAIN · max 200 rows · 15s timeout" : "Filter JSON → equality conditions · max 200 rows"}
+          Reads + writes/DDL · max 200 rows · 15s timeout · one statement per run — writes execute immediately
         </span>
       </div>
 

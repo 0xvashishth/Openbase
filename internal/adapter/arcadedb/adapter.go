@@ -60,6 +60,9 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
+// Compile-time assertion that Adapter supports raw SQL execution.
+var _ adapter.RawQuerier = (*Adapter)(nil)
+
 // New returns an ArcadeDB adapter with no live connection yet.
 func New() *Adapter {
 	return &Adapter{
@@ -302,6 +305,89 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 		return adapter.ResultSet{}, err
 	}
 	return rowsToResult(rows), nil
+}
+
+// ExecRaw executes a raw ArcadeDB SQL statement — reads (SELECT) via the
+// /query endpoint and writes/DDL (INSERT/UPDATE/DELETE/CREATE/ALTER/DROP,
+// ...) via /command. Reads return columns+rows capped at MaxRawRows; writes
+// with an empty result return {"result": "OK"} so the editor renders clearly.
+func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if err := a.requireConnected(); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	// Strip leading comments (editor samples carry them) and tolerate a single
+	// trailing semicolon: ArcadeDB's REST API wants one bare statement.
+	q := strings.TrimSpace(stripLeadingSQLComments(query))
+	q = strings.TrimSpace(strings.TrimSuffix(q, ";"))
+	if q == "" {
+		return adapter.ResultSet{}, fmt.Errorf("arcadedb: query is required")
+	}
+	first := rawFirstKeyword(q)
+	var (
+		rows []map[string]any
+		err  error
+	)
+	if first == "SELECT" {
+		rows, err = a.query(ctx, q, nil)
+	} else {
+		rows, err = a.command(ctx, q, nil)
+	}
+	if err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("arcadedb: exec raw: %w", err)
+	}
+	if len(rows) == 0 {
+		return adapter.ResultSet{
+			Columns: []string{"result"},
+			Rows:    []map[string]any{{"result": "OK"}},
+		}, nil
+	}
+	rs := rowsToResult(rows)
+	if len(rs.Rows) > adapter.MaxRawRows {
+		rs.Rows = rs.Rows[:adapter.MaxRawRows]
+	}
+	if rs.Columns == nil {
+		rs.Columns = []string{}
+	}
+	if rs.Rows == nil {
+		rs.Rows = []map[string]any{}
+	}
+	return rs, nil
+}
+
+// stripLeadingSQLComments removes leading "--" line and "/* */" block
+// comments so the statement handed to the engine starts at the keyword.
+func stripLeadingSQLComments(q string) string {
+	rest := strings.TrimSpace(q)
+	for {
+		t := strings.TrimSpace(rest)
+		if strings.HasPrefix(t, "--") {
+			if i := strings.Index(t, "\n"); i >= 0 {
+				rest = t[i+1:]
+				continue
+			}
+			return ""
+		}
+		if strings.HasPrefix(t, "/*") {
+			if i := strings.Index(t, "*/"); i >= 0 {
+				rest = t[i+2:]
+				continue
+			}
+			return t
+		}
+		return t
+	}
+}
+
+// rawFirstKeyword returns the upper-cased first keyword after stripping
+// leading comments and parens (e.g. "-- c\nSELECT ..." -> "SELECT").
+func rawFirstKeyword(q string) string {
+	rest := stripLeadingSQLComments(q)
+	rest = strings.TrimLeft(rest, "( ")
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.ToUpper(strings.Trim(fields[0], ";()"))
 }
 
 // Insert inserts a document into the type. The returned id is the record's

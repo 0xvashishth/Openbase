@@ -319,6 +319,95 @@ func TestTriggerRegisterAndRemove(t *testing.T) {
 	}
 }
 
+func TestExecRawReadsAndWrites(t *testing.T) {
+	a := connect(t)
+	ctx := context.Background()
+
+	// DDL: no rows, no columns -> normalized to an OK row.
+	rs, err := a.ExecRaw(ctx, `CREATE TABLE raw_items (id SERIAL PRIMARY KEY, name TEXT NOT NULL, qty INT NOT NULL DEFAULT 0)`)
+	if err != nil {
+		t.Fatalf("ExecRaw create: %v", err)
+	}
+	if len(rs.Rows) != 1 || rs.Rows[0]["result"] != "OK" {
+		t.Fatalf("create result = %+v, want OK row", rs.Rows)
+	}
+
+	// INSERT without RETURNING -> affected_rows.
+	rs, err = a.ExecRaw(ctx, `INSERT INTO raw_items (name, qty) VALUES ('widget', 2), ('gadget', 5)`)
+	if err != nil {
+		t.Fatalf("ExecRaw insert: %v", err)
+	}
+	if rs.Rows[0]["affected_rows"] != int64(2) {
+		t.Fatalf("insert affected_rows = %+v, want 2", rs.Rows)
+	}
+
+	// INSERT ... RETURNING -> real rows.
+	rs, err = a.ExecRaw(ctx, `INSERT INTO raw_items (name, qty) VALUES ('doohickey', 7) RETURNING id, name`)
+	if err != nil {
+		t.Fatalf("ExecRaw insert returning: %v", err)
+	}
+	if len(rs.Rows) != 1 || rs.Rows[0]["name"] != "doohickey" {
+		t.Fatalf("returning rows = %+v", rs.Rows)
+	}
+
+	// SELECT read path.
+	rs, err = a.ExecRaw(ctx, `SELECT name, qty FROM raw_items ORDER BY qty`)
+	if err != nil {
+		t.Fatalf("ExecRaw select: %v", err)
+	}
+	if len(rs.Rows) != 3 || rs.Rows[0]["name"] != "widget" {
+		t.Fatalf("select rows = %+v", rs.Rows)
+	}
+
+	// UPDATE / DELETE report affected rows.
+	rs, err = a.ExecRaw(ctx, `UPDATE raw_items SET qty = qty + 1 WHERE qty >= 5`)
+	if err != nil {
+		t.Fatalf("ExecRaw update: %v", err)
+	}
+	if rs.Rows[0]["affected_rows"] != int64(2) {
+		t.Fatalf("update affected_rows = %+v, want 2", rs.Rows)
+	}
+	rs, err = a.ExecRaw(ctx, `DELETE FROM raw_items WHERE name = 'widget'`)
+	if err != nil {
+		t.Fatalf("ExecRaw delete: %v", err)
+	}
+	if rs.Rows[0]["affected_rows"] != int64(1) {
+		t.Fatalf("delete affected_rows = %+v, want 1", rs.Rows)
+	}
+
+	// DROP is DDL again.
+	if _, err := a.ExecRaw(ctx, `DROP TABLE raw_items`); err != nil {
+		t.Fatalf("ExecRaw drop: %v", err)
+	}
+}
+
+func TestExecRawCapsRows(t *testing.T) {
+	a := connect(t)
+	ctx := context.Background()
+
+	rs, err := a.ExecRaw(ctx, `SELECT g FROM generate_series(1, 500) AS g`)
+	if err != nil {
+		t.Fatalf("ExecRaw generate_series: %v", err)
+	}
+	if len(rs.Rows) != adapter.MaxRawRows {
+		t.Fatalf("got %d rows, want cap %d", len(rs.Rows), adapter.MaxRawRows)
+	}
+}
+
+func TestExecRawSurfacesEngineErrors(t *testing.T) {
+	a := connect(t)
+	ctx := context.Background()
+
+	if _, err := a.ExecRaw(ctx, `SELECT * FROM does_not_exist`); err == nil {
+		t.Fatal("expected engine error for unknown table")
+	}
+
+	notConnected := postgres.New()
+	if _, err := notConnected.ExecRaw(ctx, `SELECT 1`); err == nil {
+		t.Fatal("expected not-connected error")
+	}
+}
+
 func ctxDone(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {

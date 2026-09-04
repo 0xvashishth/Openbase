@@ -152,9 +152,12 @@ func (f *fakeArcade) execInsert(sql string, params []any) ([]map[string]any, err
 	doc := map[string]any{}
 	pi := 0
 	for _, fld := range fields {
-		name := strings.TrimSpace(fld[:strings.Index(fld, "=")])
-		doc[name] = params[pi]
-		pi++
+		eq := strings.Index(fld, "=")
+		if eq < 0 {
+			return nil, fmt.Errorf("bad SET field: %q", fld)
+		}
+		name := strings.TrimSpace(fld[:eq])
+		doc[name] = rhsValue(fld[eq+1:], params, &pi)
 	}
 	f.seq++
 	rid := fmt.Sprintf("#%d:0", f.seq)
@@ -183,9 +186,12 @@ func (f *fakeArcade) execUpdate(sql string, params []any) ([]map[string]any, err
 	pi := 0
 	updates := map[string]any{}
 	for _, fld := range fields {
-		name := strings.TrimSpace(fld[:strings.Index(fld, "=")])
-		updates[name] = params[pi]
-		pi++
+		eq := strings.Index(fld, "=")
+		if eq < 0 {
+			return nil, fmt.Errorf("bad SET field: %q", fld)
+		}
+		name := strings.TrimSpace(fld[:eq])
+		updates[name] = rhsValue(fld[eq+1:], params, &pi)
 	}
 	whereArgs := args[pi:]
 	for _, doc := range f.types[typeName] {
@@ -362,8 +368,9 @@ func toFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-// matches evaluates a WHERE clause of form "f1 OP ? AND f2 OP ? ..." against a
-// doc using the where params.
+// matches evaluates a WHERE clause of form "f1 OP <?|literal> AND ..." against
+// a doc, using the where params for each "?" placeholder. Raw SQL (from
+// ExecRaw) inlines literals instead of binding params, so both are supported.
 func isMatch(doc map[string]any, whereSQL string, args []any) bool {
 	whereSQL = strings.TrimSpace(whereSQL)
 	if whereSQL == "" {
@@ -375,12 +382,11 @@ func isMatch(doc map[string]any, whereSQL string, args []any) bool {
 		p = strings.TrimSpace(p)
 		// form: `field OP ?` — the adapter emits `field= ?` (spacing-insensitive
 		// in real ArcadeDB), so locate the operator token tolerant of whitespace.
-		field, op, ok := splitCondition(p)
+		field, op, rhs, ok := splitCondition(p)
 		if !ok {
 			return false
 		}
-		val := args[ai]
-		ai++
+		val := rhsValue(rhs, args, &ai)
 		docVal := doc[field]
 		switch strings.TrimSpace(op) {
 		case "CONTAINS":
@@ -423,19 +429,57 @@ func isMatch(doc map[string]any, whereSQL string, args []any) bool {
 	return true
 }
 
-// splitCondition parses a single "field OP ?" condition (tolerant of missing
-// whitespace around the operator, e.g. "name= ?") into field and operator.
-func splitCondition(p string) (field string, op string, ok bool) {
+// rhsValue resolves the right-hand side of a condition or SET assignment:
+// "?" consumes the next bound param, anything else is parsed as a literal
+// ('text', 123, 1.5, true/false/null).
+func rhsValue(rhs string, params []any, pi *int) any {
+	t := strings.TrimSpace(rhs)
+	if t == "?" {
+		if *pi < len(params) {
+			v := params[*pi]
+			*pi++
+			return v
+		}
+		*pi++
+		return nil
+	}
+	return parseLiteral(t)
+}
+
+func parseLiteral(t string) any {
+	t = strings.TrimSpace(t)
+	if len(t) >= 2 && (t[0] == '\'' && t[len(t)-1] == '\'' || t[0] == '"' && t[len(t)-1] == '"') {
+		return t[1 : len(t)-1]
+	}
+	switch strings.ToLower(t) {
+	case "true":
+		return true
+	case "false":
+		return false
+	case "null":
+		return nil
+	}
+	if f, err := strconv.ParseFloat(t, 64); err == nil {
+		return f
+	}
+	return t
+}
+
+// splitCondition parses a single "field OP <rhs>" condition (tolerant of
+// missing whitespace around the operator, e.g. "name= ?") into the field,
+// operator and right-hand side ("?" or an inline literal).
+func splitCondition(p string) (field string, op string, rhs string, ok bool) {
 	p = strings.TrimSpace(p)
 	// longer operators must be tried before the single-char ones.
 	for _, cand := range []string{"<>", ">=", "<=", "CONTAINS", "=%", "=", ">", "<"} {
 		if idx := strings.Index(p, cand); idx >= 0 {
 			field = strings.TrimSpace(p[:idx])
 			op = strings.TrimSpace(cand)
-			return field, op, true
+			rhs = strings.TrimSpace(p[idx+len(cand):])
+			return field, op, rhs, true
 		}
 	}
-	return "", "", false
+	return "", "", "", false
 }
 
 func containsVal(docVal, val any) bool {

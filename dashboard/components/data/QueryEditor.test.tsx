@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryEditor, parseFilterJson } from "./QueryEditor";
+import { QueryEditor } from "./QueryEditor";
 
 vi.mock("@/lib/api", () => ({
   api: { execSQL: vi.fn(), queryRows: vi.fn(), listCollections: vi.fn() },
@@ -10,23 +10,6 @@ vi.mock("@/components/AuthProvider", () => ({ authToken: () => "tok" }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
 
 import { api } from "@/lib/api";
-
-describe("parseFilterJson", () => {
-  it("parses flat objects to equality conditions", () => {
-    expect(parseFilterJson('{ "status": "active", "n": 3 }')).toEqual([
-      { field: "status", operator: "eq", value: "active" },
-      { field: "n", operator: "eq", value: 3 },
-    ]);
-  });
-
-  it("strips // comment lines so samples run", () => {
-    expect(parseFilterJson('// hello\n{ "a": 1 }')).toEqual([{ field: "a", operator: "eq", value: 1 }]);
-  });
-
-  it("rejects non-objects", () => {
-    expect(() => parseFilterJson("[1,2]")).toThrow();
-  });
-});
 
 describe("QueryEditor", () => {
   beforeEach(() => {
@@ -53,14 +36,32 @@ describe("QueryEditor", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/syntax error/);
   });
 
-  it("runs NoSQL via query builder with collection + filter", async () => {
-    vi.mocked(api.queryRows).mockResolvedValue({ columns: ["id"], rows: [{ id: "x" }] } as never);
+  it("runs FerretDB via raw mongo-shell (not the query builder)", async () => {
+    vi.mocked(api.execSQL).mockResolvedValue({ columns: ["_id"], rows: [{ _id: "x" }] } as never);
     const user = userEvent.setup();
     render(<QueryEditor projectId="p1" engine="ferretdb" />);
     expect(screen.getByText(/MongoDB/)).toBeInTheDocument();
-    // wait for collections to load into the picker before running
-    await waitFor(() => expect(screen.getByLabelText(/collection/i)).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /run/i }));
-    await waitFor(() => expect(api.queryRows).toHaveBeenCalledWith("tok", "p1", expect.objectContaining({ collection: "users" })));
+    await waitFor(() => expect(api.execSQL).toHaveBeenCalledWith("tok", "p1", expect.stringContaining("db.")));
+    expect(screen.getByRole("table")).toHaveTextContent("x");
+  });
+
+  it("runs Valkey via raw Redis commands", async () => {
+    vi.mocked(api.execSQL).mockResolvedValue({ columns: ["result"], rows: [{ result: "OK" }] } as never);
+    const user = userEvent.setup();
+    render(<QueryEditor projectId="p1" engine="valkey" />);
+    expect(screen.getByText("Valkey (Redis)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /run/i }));
+    await waitFor(() => expect(api.execSQL).toHaveBeenCalled());
+  });
+
+  it("renders write results (affected_rows)", async () => {
+    vi.mocked(api.execSQL).mockResolvedValue(
+      { columns: ["affected_rows"], rows: [{ affected_rows: 3 }] } as never
+    );
+    const user = userEvent.setup();
+    render(<QueryEditor projectId="p1" engine="postgres" />);
+    await user.click(screen.getByRole("button", { name: /run/i }));
+    expect(await screen.findByRole("table")).toHaveTextContent("3");
   });
 });

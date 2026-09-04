@@ -186,3 +186,130 @@ func TestValkeyPingFailsOnDeadEndpoint(t *testing.T) {
 		t.Fatal("connect to dead endpoint should fail")
 	}
 }
+
+func TestValkeyExecRawReadWrite(t *testing.T) {
+	a, cleanup := newTestAdapter(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Write.
+	res, err := a.ExecRaw(ctx, `SET greeting hello`)
+	if err != nil {
+		t.Fatalf("SET: %v", err)
+	}
+	if len(res.Rows) != 1 || res.Rows[0]["result"] != "OK" {
+		t.Fatalf("SET result = %+v, want OK", res.Rows)
+	}
+
+	// Read back.
+	res, err = a.ExecRaw(ctx, `GET greeting`)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.Rows[0]["result"] != "hello" {
+		t.Fatalf("GET result = %+v, want hello", res.Rows)
+	}
+
+	// Quoted values with spaces survive tokenization.
+	if _, err := a.ExecRaw(ctx, `SET doc '{"name": "Ada Lovelace"}'`); err != nil {
+		t.Fatalf("SET quoted: %v", err)
+	}
+	res, err = a.ExecRaw(ctx, `GET doc`)
+	if err != nil {
+		t.Fatalf("GET quoted: %v", err)
+	}
+	if res.Rows[0]["result"] != `{"name": "Ada Lovelace"}` {
+		t.Fatalf("GET doc = %+v", res.Rows)
+	}
+
+	// Delete + missing key reads as nil rather than an error.
+	if _, err := a.ExecRaw(ctx, `DEL greeting`); err != nil {
+		t.Fatalf("DEL: %v", err)
+	}
+	res, err = a.ExecRaw(ctx, `GET greeting`)
+	if err != nil {
+		t.Fatalf("GET missing: %v", err)
+	}
+	if res.Rows[0]["result"] != nil {
+		t.Fatalf("missing key result = %+v, want nil", res.Rows)
+	}
+}
+
+func TestValkeyExecRawMultiLineAndComments(t *testing.T) {
+	a, cleanup := newTestAdapter(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Comment lines are skipped; commands run in order; last result returned.
+	res, err := a.ExecRaw(ctx, `// seed a key
+SET a 1
+-- another comment
+SET b 2
+GET b`)
+	if err != nil {
+		t.Fatalf("multi-line: %v", err)
+	}
+	if res.Rows[0]["result"] != "2" {
+		t.Fatalf("last result = %+v, want 2", res.Rows)
+	}
+}
+
+func TestValkeyExecRawArrayResult(t *testing.T) {
+	a, cleanup := newTestAdapter(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	if _, err := a.ExecRaw(ctx, "SET k1 v1"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := a.ExecRaw(ctx, "SET k2 v2"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	res, err := a.ExecRaw(ctx, "KEYS *")
+	if err != nil {
+		t.Fatalf("KEYS: %v", err)
+	}
+	if len(res.Columns) != 1 || res.Columns[0] != "value" {
+		t.Fatalf("columns = %+v, want [value]", res.Columns)
+	}
+	if len(res.Rows) != 2 {
+		t.Fatalf("expected 2 keys, got %+v", res.Rows)
+	}
+}
+
+func TestValkeyExecRawErrors(t *testing.T) {
+	a, cleanup := newTestAdapter(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	if _, err := a.ExecRaw(ctx, "   "); err == nil {
+		t.Fatal("expected error for empty query")
+	}
+	if _, err := a.ExecRaw(ctx, `SET k 'unterminated`); err == nil {
+		t.Fatal("expected error for unterminated quote")
+	}
+	if _, err := a.ExecRaw(ctx, "NOTACOMMAND x"); err == nil {
+		t.Fatal("expected error for unknown command")
+	}
+
+	notConnected := New()
+	if _, err := notConnected.ExecRaw(ctx, "GET x"); err == nil {
+		t.Fatal("expected not-connected error")
+	}
+}
+
+func TestTokenizeRedis(t *testing.T) {
+	got, err := tokenizeRedis(`SET doc "{\"a\": 1}" EX 60`)
+	if err != nil {
+		t.Fatalf("tokenize: %v", err)
+	}
+	want := []string{"SET", "doc", `{"a": 1}`, "EX", "60"}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("token %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

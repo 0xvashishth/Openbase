@@ -367,7 +367,7 @@ func (s *Server) queryRows(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rs)
 }
 
-// ---- Raw read-only SQL (SQL editor) ----
+// ---- Raw SQL (SQL editor: full read + write) ----
 
 // maxRawSQLBytes caps the request body so a pasted dump can't OOM the host.
 const maxRawSQLBytes = 20000
@@ -376,9 +376,14 @@ type execSQLRequest struct {
 	Query string `json:"query"`
 }
 
-// validateReadOnlySQL rejects empty, oversized, or non-read statements.
-// Only SELECT / WITH / EXPLAIN (after stripping leading comments) are allowed.
-func validateReadOnlySQL(q string) error {
+// validateRawSQL rejects empty or oversized statements. Unlike the old
+// read-only guard, it allows the full statement surface the engine natively
+// speaks: SELECT/WITH/EXPLAIN reads plus DML (INSERT/UPDATE/DELETE) and DDL
+// (CREATE/ALTER/DROP/TRUNCATE, ...) for SQL engines, and the native command
+// language for document/key-value/vector engines. As a safety rail it still
+// rejects stacked statements (";" followed by another statement outside
+// strings/comments) so one Run executes one statement.
+func validateRawSQL(q string) error {
 	trimmed := strings.TrimSpace(q)
 	if trimmed == "" {
 		return fmt.Errorf("query is required")
@@ -386,6 +391,7 @@ func validateReadOnlySQL(q string) error {
 	if len(q) > maxRawSQLBytes {
 		return fmt.Errorf("query exceeds %d bytes", maxRawSQLBytes)
 	}
+	// Unterminated block comment is still a syntax error.
 	rest := trimmed
 	for {
 		rest = strings.TrimSpace(rest)
@@ -405,20 +411,111 @@ func validateReadOnlySQL(q string) error {
 		}
 		break
 	}
-	rest = strings.TrimLeft(rest, "( ")
-	first := strings.ToUpper(strings.Fields(rest)[0])
-	// Strip trailing semicolons/punctuation from the first word.
-	first = strings.Trim(first, ";()")
-	switch first {
-	case "SELECT", "WITH", "EXPLAIN":
-		return nil
-	default:
-		return fmt.Errorf("only read-only SELECT/WITH/EXPLAIN statements are allowed")
+	if strings.TrimSpace(rest) == "" {
+		return fmt.Errorf("query is required")
 	}
+	if hasStackedStatements(q) {
+		return fmt.Errorf("run one statement at a time; multiple statements separated by ';' are not allowed")
+	}
+	return nil
 }
 
-// execSQL runs a raw read-only query against SQL engines (postgres, mysql).
-// Document/key-value/vector engines don't implement adapter.RawQuerier and get
+// hasStackedStatements reports whether q contains a ";" terminator followed
+// by another statement, ignoring semicolons inside single/double/backtick
+// quoted strings and inside -- line / /* block */ comments.
+func hasStackedStatements(q string) bool {
+	var (
+		inSingle, inDouble, inBacktick bool
+		inLineComment, inBlockComment  bool
+		seenSemi                       bool
+	)
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		var next byte
+		if i+1 < len(q) {
+			next = q[i+1]
+		}
+		if inLineComment {
+			if c == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			if c == '*' && next == '/' {
+				inBlockComment = false
+				i++
+			}
+			continue
+		}
+		if inSingle {
+			if c == '\'' {
+				if next == '\'' {
+					i++ // escaped ''
+				} else {
+					inSingle = false
+				}
+			}
+			continue
+		}
+		if inDouble {
+			if c == '\\' && i+1 < len(q) {
+				i++
+				continue
+			}
+			if c == '"' {
+				inDouble = false
+			}
+			continue
+		}
+		if inBacktick {
+			if c == '`' {
+				inBacktick = false
+			}
+			continue
+		}
+		if c == '-' && next == '-' {
+			inLineComment = true
+			i++
+			continue
+		}
+		if c == '/' && next == '*' {
+			inBlockComment = true
+			i++
+			continue
+		}
+		if c == '\'' {
+			inSingle = true
+			continue
+		}
+		if c == '"' {
+			inDouble = true
+			continue
+		}
+		if c == '`' {
+			inBacktick = true
+			continue
+		}
+		if c == ';' {
+			seenSemi = true
+			continue
+		}
+		if seenSemi {
+			// Content after a terminator: skip whitespace; comments are
+			// handled above, anything else means a stacked statement.
+			if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// execSQL runs a raw query against the project's engine (postgres, mysql,
+// arcadedb, ferretdb, valkey, qdrant — every adapter implementing
+// adapter.RawQuerier). Reads return columns+rows (capped at 200); writes
+// return affected_rows / insert_id / OK rows. Engines without RawQuerier get
 // an honest 400 instead of a fake execution.
 func (s *Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
@@ -431,7 +528,7 @@ func (s *Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := validateReadOnlySQL(req.Query); err != nil {
+	if err := validateRawSQL(req.Query); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -444,13 +541,17 @@ func (s *Server) execSQL(w http.ResponseWriter, r *http.Request) {
 
 	raw, ok := a.(adapter.RawQuerier)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "raw SQL is only supported for postgres and mysql; use the query builder for this engine")
+		writeError(w, http.StatusBadRequest, "raw queries are not supported for this engine")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	rs, err := raw.ExecRaw(ctx, req.Query)
 	if err != nil {
+		if errors.Is(err, adapter.ErrUnsupported) {
+			writeError(w, http.StatusBadRequest, "raw queries are not supported for this engine: "+err.Error())
+			return
+		}
 		s.writeConnectionErr(w, err)
 		return
 	}

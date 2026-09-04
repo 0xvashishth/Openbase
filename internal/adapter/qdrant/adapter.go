@@ -41,6 +41,9 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
+// Compile-time assertion that Adapter supports raw execution.
+var _ adapter.RawQuerier = (*Adapter)(nil)
+
 // New returns a Qdrant adapter with no live connection yet.
 func New() *Adapter {
 	return &Adapter{
@@ -281,6 +284,423 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 	result.Columns = cols
 	result.Rows = rows
 	return result, nil
+}
+
+// ExecRaw executes raw Qdrant commands:
+//
+//	SCROLL <collection> [<json>]   read points (json: {"filter":..,"limit":N} or {"field":value,...})
+//	SEARCH <collection> <json>     vector search (json: {"vector":[...],"limit":N,"filter":...})
+//	UPSERT <collection> <json>     upsert points (json array, {"points":[...]}, or single point)
+//	DELETE <collection> [<json>]   delete points (json: {"filter":..} or {"points":[ids]} or equality map)
+//	CREATE <collection> <json>     create collection (json config, e.g. {"vectors":{"size":3,"distance":"Cosine"}})
+//	DROP <collection>              delete collection
+//
+// A JSON object with {"collection","op",...} is also accepted (op defaults to
+// scroll). Reads return payload+id+vector rows capped at MaxRawRows; writes
+// return {"result":"OK"}.
+func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
+	if err := a.requireConnected(); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	trimmed := stripQdrantComments(query)
+	trimmed = strings.TrimSpace(trimmed)
+	trimmed = strings.TrimSpace(strings.TrimSuffix(trimmed, ";"))
+	if trimmed == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: query is required")
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		return a.execRawJSON(ctx, trimmed)
+	}
+	op, coll, rest := splitQdrantHead(trimmed)
+	switch op {
+	case "SCROLL":
+		return a.execScrollRaw(ctx, coll, rest)
+	case "SEARCH":
+		return a.execSearchRaw(ctx, coll, rest)
+	case "UPSERT":
+		return a.execUpsertRaw(ctx, coll, rest)
+	case "DELETE":
+		return a.execDeletePointsRaw(ctx, coll, rest)
+	case "CREATE":
+		return a.execCreateRaw(ctx, coll, rest)
+	case "DROP":
+		if coll == "" {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: DROP requires a collection (e.g. DROP mycol)")
+		}
+		if err := a.do(ctx, http.MethodDelete, "/collections/"+url.PathEscape(coll), nil, nil); err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: drop: %w", err)
+		}
+		return qdrantOK(), nil
+	default:
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: want SCROLL|SEARCH|UPSERT|DELETE|CREATE|DROP <collection> [json] (e.g. SCROLL mycol {\"limit\": 25})")
+	}
+}
+
+func (a *Adapter) execScrollRaw(ctx context.Context, coll, rest string) (adapter.ResultSet, error) {
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: SCROLL requires a collection")
+	}
+	limit := adapter.MaxRawRows
+	var filter any
+	if strings.TrimSpace(rest) != "" {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(rest), &m); err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid SCROLL json: %w", err)
+		}
+		if _, hasFilter := m["filter"]; hasFilter || m["limit"] != nil {
+			filter = m["filter"]
+			if lim, ok := toLimit(m["limit"]); ok {
+				limit = lim
+			}
+		} else {
+			// Shorthand equality map {"status":"active"} -> Qdrant must filter.
+			filter = equalityMapToMust(m)
+		}
+	}
+	body := map[string]any{"limit": limit}
+	if filter != nil {
+		body["filter"] = filter
+	}
+	var scroll struct {
+		Points []point `json:"points"`
+	}
+	if err := a.do(ctx, http.MethodPost, "/collections/"+url.PathEscape(coll)+"/points/scroll", body, &scroll); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	return pointsToResult(scroll.Points), nil
+}
+
+func (a *Adapter) execSearchRaw(ctx context.Context, coll, rest string) (adapter.ResultSet, error) {
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: SEARCH requires a collection")
+	}
+	if strings.TrimSpace(rest) == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: SEARCH requires json with \"vector\" (e.g. SEARCH mycol {\"vector\":[0.1,0.2],\"limit\":5})")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(rest), &body); err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid SEARCH json: %w", err)
+	}
+	vecRaw, ok := body["vector"]
+	if !ok {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: SEARCH requires \"vector\" array")
+	}
+	vec, err := toFloatSlice(vecRaw)
+	if err != nil || len(vec) == 0 {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid vector: must be a non-empty float array")
+	}
+	if _, ok := body["limit"]; !ok {
+		body["limit"] = adapter.MaxRawRows
+	}
+	if lim, ok := toLimit(body["limit"]); ok && lim > adapter.MaxRawRows {
+		body["limit"] = adapter.MaxRawRows
+	}
+	var found struct {
+		Points []point `json:"points"`
+		// Search returns a bare array in some versions; handle both below.
+	}
+	// Qdrant search returns {"result": [...]} (array, not {points:[...]}).
+	var arr []point
+	if err := a.do(ctx, http.MethodPost, "/collections/"+url.PathEscape(coll)+"/points/search", body, &arr); err != nil {
+		// Fall back to {points:[...]} envelope for test fakes.
+		if err2 := a.do(ctx, http.MethodPost, "/collections/"+url.PathEscape(coll)+"/points/search", body, &found); err2 != nil {
+			return adapter.ResultSet{}, err
+		}
+		return pointsToResult(found.Points), nil
+	}
+	return pointsToResult(arr), nil
+}
+
+func (a *Adapter) execUpsertRaw(ctx context.Context, coll, rest string) (adapter.ResultSet, error) {
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: UPSERT requires a collection")
+	}
+	if strings.TrimSpace(rest) == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: UPSERT requires points json (array, {\"points\":[...]}, or single point)")
+	}
+	var points []map[string]any
+	trimmed := strings.TrimSpace(rest)
+	if strings.HasPrefix(trimmed, "[") {
+		if err := json.Unmarshal([]byte(trimmed), &points); err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid UPSERT points array: %w", err)
+		}
+	} else {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &obj); err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid UPSERT json: %w", err)
+		}
+		if p, ok := obj["points"]; ok {
+			raw, _ := json.Marshal(p)
+			if err := json.Unmarshal(raw, &points); err != nil {
+				return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid UPSERT points: %w", err)
+			}
+		} else if _, hasVec := obj["vector"]; hasVec || obj["id"] != nil {
+			points = []map[string]any{obj}
+		} else {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: UPSERT json must be a points array, {\"points\":[...]}, or a single {\"id\",\"vector\",...} point")
+		}
+	}
+	if len(points) == 0 {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: UPSERT requires at least one point")
+	}
+	body := map[string]any{"points": points}
+	if err := a.do(ctx, http.MethodPut, "/collections/"+url.PathEscape(coll)+"/points?wait=true", body, nil); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	return qdrantOK(), nil
+}
+
+func (a *Adapter) execDeletePointsRaw(ctx context.Context, coll, rest string) (adapter.ResultSet, error) {
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: DELETE requires a collection")
+	}
+	body := map[string]any{"filter": map[string]any{}}
+	if strings.TrimSpace(rest) != "" {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(rest), &m); err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid DELETE json: %w", err)
+		}
+		if _, hasPoints := m["points"]; hasPoints {
+			body = map[string]any{"points": m["points"]}
+		} else if f, hasFilter := m["filter"]; hasFilter {
+			body = map[string]any{"filter": f}
+		} else {
+			body = map[string]any{"filter": map[string]any{"must": equalityMapToMustList(m)}}
+			if len(m) == 0 {
+				body = map[string]any{"filter": map[string]any{}}
+			}
+		}
+	}
+	if err := a.do(ctx, http.MethodPost, "/collections/"+url.PathEscape(coll)+"/points/delete?wait=true", body, nil); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	return qdrantOK(), nil
+}
+
+func (a *Adapter) execCreateRaw(ctx context.Context, coll, rest string) (adapter.ResultSet, error) {
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: CREATE requires a collection (e.g. CREATE mycol {\"vectors\":{\"size\":3,\"distance\":\"Cosine\"}})")
+	}
+	if strings.TrimSpace(rest) == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: CREATE requires a config json (e.g. {\"vectors\":{\"size\":3,\"distance\":\"Cosine\"}})")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(rest), &body); err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid CREATE json: %w", err)
+	}
+	if err := a.do(ctx, http.MethodPut, "/collections/"+url.PathEscape(coll), body, nil); err != nil {
+		return adapter.ResultSet{}, err
+	}
+	return qdrantOK(), nil
+}
+
+// execRawJSON handles {"collection","op",...} as an alternative to the
+// SCROLL|SEARCH|... prefix form (op defaults to scroll).
+func (a *Adapter) execRawJSON(ctx context.Context, raw string) (adapter.ResultSet, error) {
+	var cmd map[string]any
+	if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: invalid JSON: %w", err)
+	}
+	coll, _ := cmd["collection"].(string)
+	if coll == "" {
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: JSON raw requires \"collection\" (e.g. {\"collection\":\"mycol\",\"op\":\"scroll\"})")
+	}
+	op, _ := cmd["op"].(string)
+	if op == "" {
+		op = "scroll"
+	}
+	rest := ""
+	switch op {
+	case "scroll", "SCROLL":
+		if _, ok := cmd["filter"]; ok || cmd["limit"] != nil {
+			b, _ := json.Marshal(map[string]any{"filter": cmd["filter"], "limit": cmd["limit"]})
+			rest = string(b)
+		} else {
+			// Pass through remaining keys as equality filter.
+			eq := map[string]any{}
+			for k, v := range cmd {
+				if k == "collection" || k == "op" {
+					continue
+				}
+				eq[k] = v
+			}
+			if len(eq) > 0 {
+				b, _ := json.Marshal(eq)
+				rest = string(b)
+			}
+		}
+		return a.execScrollRaw(ctx, coll, rest)
+	case "search", "SEARCH":
+		b, _ := json.Marshal(cmd)
+		// search body is the cmd minus collection/op
+		var body map[string]any
+		_ = json.Unmarshal(b, &body)
+		delete(body, "collection")
+		delete(body, "op")
+		rb, _ := json.Marshal(body)
+		return a.execSearchRaw(ctx, coll, string(rb))
+	case "upsert", "UPSERT":
+		if pts, ok := cmd["points"]; ok {
+			b, _ := json.Marshal(pts)
+			return a.execUpsertRaw(ctx, coll, string(b))
+		}
+		if pt, ok := cmd["point"]; ok {
+			b, _ := json.Marshal(pt)
+			return a.execUpsertRaw(ctx, coll, string(b))
+		}
+		b, _ := json.Marshal(cmd)
+		var body map[string]any
+		_ = json.Unmarshal(b, &body)
+		delete(body, "collection")
+		delete(body, "op")
+		rb, _ := json.Marshal(body)
+		return a.execUpsertRaw(ctx, coll, string(rb))
+	case "delete", "DELETE":
+		if f, ok := cmd["filter"]; ok {
+			b, _ := json.Marshal(map[string]any{"filter": f})
+			return a.execDeletePointsRaw(ctx, coll, string(b))
+		}
+		eq := map[string]any{}
+		for k, v := range cmd {
+			if k == "collection" || k == "op" {
+				continue
+			}
+			eq[k] = v
+		}
+		if len(eq) == 0 {
+			return a.execDeletePointsRaw(ctx, coll, "")
+		}
+		b, _ := json.Marshal(eq)
+		return a.execDeletePointsRaw(ctx, coll, string(b))
+	case "create", "CREATE":
+		b, _ := json.Marshal(cmd["config"])
+		if string(b) == "null" || len(cmd) <= 2 {
+			// cmd itself may be the config minus collection/op
+			body := map[string]any{}
+			for k, v := range cmd {
+				if k == "collection" || k == "op" {
+					continue
+				}
+				body[k] = v
+			}
+			b, _ = json.Marshal(body)
+		}
+		return a.execCreateRaw(ctx, coll, string(b))
+	case "drop", "DROP":
+		if err := a.do(ctx, http.MethodDelete, "/collections/"+url.PathEscape(coll), nil, nil); err != nil {
+			return adapter.ResultSet{}, err
+		}
+		return qdrantOK(), nil
+	default:
+		return adapter.ResultSet{}, fmt.Errorf("qdrant: unsupported op %q (want scroll/search/upsert/delete/create/drop)", op)
+	}
+}
+
+func qdrantOK() adapter.ResultSet {
+	return adapter.ResultSet{Columns: []string{"result"}, Rows: []map[string]any{{"result": "OK"}}}
+}
+
+func pointsToResult(pts []point) adapter.ResultSet {
+	keys := map[string]bool{}
+	rows := make([]map[string]any, 0, len(pts))
+	for _, p := range pts {
+		if len(rows) >= adapter.MaxRawRows {
+			break
+		}
+		row := map[string]any{}
+		for k, v := range p.Payload {
+			row[k] = v
+		}
+		if p.ID != "" {
+			row["id"] = p.ID
+			keys["id"] = true
+		}
+		if len(p.Vector) > 0 {
+			row["vector"] = p.Vector
+			keys["vector"] = true
+		}
+		for k := range row {
+			keys[k] = true
+		}
+		rows = append(rows, row)
+	}
+	cols := make([]string, 0, len(keys))
+	for k := range keys {
+		cols = append(cols, k)
+	}
+	sort.Strings(cols)
+	if cols == nil {
+		cols = []string{}
+	}
+	if rows == nil {
+		rows = []map[string]any{}
+	}
+	return adapter.ResultSet{Columns: cols, Rows: rows}
+}
+
+func splitQdrantHead(q string) (op, coll, rest string) {
+	fields := strings.Fields(q)
+	if len(fields) == 0 {
+		return "", "", ""
+	}
+	op = strings.ToUpper(fields[0])
+	if len(fields) < 2 {
+		return op, "", ""
+	}
+	coll = fields[1]
+	// rest is everything after the collection token in the original string.
+	idx := strings.Index(q, fields[1])
+	if idx >= 0 {
+		rest = strings.TrimSpace(q[idx+len(fields[1]):])
+	}
+	return op, coll, rest
+}
+
+func stripQdrantComments(q string) string {
+	lines := strings.Split(q, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "//") || strings.HasPrefix(t, "--") || strings.HasPrefix(t, "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+func toLimit(v any) (int, bool) {
+	switch t := v.(type) {
+	case float64:
+		if t > 0 {
+			return int(t), true
+		}
+	case int:
+		if t > 0 {
+			return t, true
+		}
+	case int64:
+		if t > 0 {
+			return int(t), true
+		}
+	case json.Number:
+		if n, err := t.Int64(); err == nil && n > 0 {
+			return int(n), true
+		}
+	}
+	return 0, false
+}
+
+func equalityMapToMust(m map[string]any) map[string]any {
+	return map[string]any{"must": equalityMapToMustList(m)}
+}
+
+func equalityMapToMustList(m map[string]any) []map[string]any {
+	must := make([]map[string]any, 0, len(m))
+	for k, v := range m {
+		must = append(must, map[string]any{"key": k, "match": v})
+	}
+	return must
 }
 
 // point mirrors a Qdrant point for scroll decoding.

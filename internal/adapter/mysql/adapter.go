@@ -38,7 +38,7 @@ type Adapter struct {
 // Compile-time assertion that Adapter satisfies the interface.
 var _ adapter.DatabaseAdapter = (*Adapter)(nil)
 
-// Compile-time assertion that Adapter supports raw read-only SQL.
+// Compile-time assertion that Adapter supports raw SQL (reads + writes/DDL).
 var _ adapter.RawQuerier = (*Adapter)(nil)
 
 // New returns a MySQL adapter with no live connection yet.
@@ -273,46 +273,114 @@ func (a *Adapter) Query(ctx context.Context, q adapter.UniversalQuery) (adapter.
 	return result, rows.Err()
 }
 
-// ExecRaw executes a read-only raw SQL statement (SELECT/WITH/EXPLAIN).
-// Write-guard validation lives in the server handler; rows are capped at
-// adapter.MaxRawRows.
+// ExecRaw executes a raw SQL statement — reads (SELECT/WITH/EXPLAIN/SHOW)
+// as well as DML (INSERT/UPDATE/DELETE) and DDL (CREATE/ALTER/DROP/TRUNCATE).
+// Reads return columns+rows capped at adapter.MaxRawRows. Writes go through
+// Exec and return {"affected_rows": N} (plus insert_id when present) or
+// {"result": "OK"} for DDL.
 func (a *Adapter) ExecRaw(ctx context.Context, query string) (adapter.ResultSet, error) {
 	if a.db == nil {
 		return adapter.ResultSet{}, fmt.Errorf("mysql: not connected")
 	}
-	rows, err := a.db.QueryContext(ctx, query)
+	if isReadStatement(query) {
+		rows, err := a.db.QueryContext(ctx, query)
+		if err != nil {
+			return adapter.ResultSet{}, fmt.Errorf("mysql: exec raw: %w", err)
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return adapter.ResultSet{}, err
+		}
+		result := adapter.ResultSet{Columns: cols, Rows: []map[string]any{}}
+		if result.Columns == nil {
+			result.Columns = []string{}
+		}
+		raw := make([]sql.RawBytes, len(cols))
+		scanArgs := make([]any, len(cols))
+		for i := range raw {
+			scanArgs[i] = &raw[i]
+		}
+		for rows.Next() {
+			if len(result.Rows) >= adapter.MaxRawRows {
+				break
+			}
+			if err := rows.Scan(scanArgs...); err != nil {
+				return result, err
+			}
+			row := make(map[string]any, len(cols))
+			for i, c := range cols {
+				row[c] = bytesToValue(raw[i])
+			}
+			result.Rows = append(result.Rows, row)
+		}
+		return result, rows.Err()
+	}
+	res, err := a.db.ExecContext(ctx, query)
 	if err != nil {
 		return adapter.ResultSet{}, fmt.Errorf("mysql: exec raw: %w", err)
 	}
-	defer rows.Close()
+	affected, _ := res.RowsAffected()
+	lastID, _ := res.LastInsertId()
+	if lastID != 0 {
+		return adapter.ResultSet{
+			Columns: []string{"affected_rows", "insert_id"},
+			Rows:    []map[string]any{{"affected_rows": affected, "insert_id": lastID}},
+		}, nil
+	}
+	if affected != 0 {
+		return adapter.ResultSet{
+			Columns: []string{"affected_rows"},
+			Rows:    []map[string]any{{"affected_rows": affected}},
+		}, nil
+	}
+	return adapter.ResultSet{
+		Columns: []string{"result"},
+		Rows:    []map[string]any{{"result": "OK"}},
+	}, nil
+}
 
-	cols, err := rows.Columns()
-	if err != nil {
-		return adapter.ResultSet{}, err
+// isReadStatement reports whether a raw query should use the Query (row-set)
+// path rather than Exec. It strips leading comments/parens like the server
+// validator so "-- c\nSELECT ..." and "(SELECT ...)" classify as reads.
+func isReadStatement(q string) bool {
+	rest := stripLeadingComments(q)
+	rest = strings.TrimLeft(rest, "( ")
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return true
 	}
-	result := adapter.ResultSet{Columns: cols, Rows: []map[string]any{}}
-	if result.Columns == nil {
-		result.Columns = []string{}
+	first := strings.ToUpper(strings.Trim(fields[0], ";()"))
+	switch first {
+	case "SELECT", "WITH", "EXPLAIN", "SHOW", "DESCRIBE", "DESC":
+		return true
+	default:
+		return false
 	}
-	raw := make([]sql.RawBytes, len(cols))
-	scanArgs := make([]any, len(cols))
-	for i := range raw {
-		scanArgs[i] = &raw[i]
-	}
-	for rows.Next() {
-		if len(result.Rows) >= adapter.MaxRawRows {
-			break
+}
+
+// stripLeadingComments removes leading -- line comments and /* */ blocks.
+func stripLeadingComments(q string) string {
+	rest := strings.TrimSpace(q)
+	for {
+		trimmed := strings.TrimSpace(rest)
+		if strings.HasPrefix(trimmed, "--") {
+			if i := strings.Index(trimmed, "\n"); i >= 0 {
+				rest = trimmed[i+1:]
+				continue
+			}
+			return ""
 		}
-		if err := rows.Scan(scanArgs...); err != nil {
-			return result, err
+		if strings.HasPrefix(trimmed, "/*") {
+			if i := strings.Index(trimmed, "*/"); i >= 0 {
+				rest = trimmed[i+2:]
+				continue
+			}
+			return trimmed
 		}
-		row := make(map[string]any, len(cols))
-		for i, c := range cols {
-			row[c] = bytesToValue(raw[i])
-		}
-		result.Rows = append(result.Rows, row)
+		return trimmed
 	}
-	return result, rows.Err()
 }
 
 func buildWhere(f adapter.Filter) (string, []any, error) {

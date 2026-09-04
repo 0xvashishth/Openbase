@@ -112,7 +112,8 @@ When adding support for a new database engine, an implementer should:
 2. Fill out `Capabilities()` honestly.
 3. Add a row to the capability matrix in this doc.
 4. Add connection-string auto-detection pattern (see `SCHEMA.md` §3) so BYODB mode can auto-identify the engine from the URL scheme.
-5. Add adapter-specific tests against a real instance of that database (via Docker) — never mock the underlying DB in adapter tests, since the whole point of the adapter is faithfully translating to real native behavior.
+5. Implement the optional `RawQuerier` interface (see §6) so the SQL editor can run the engine's own language.
+6. Add adapter-specific tests against a real instance of that database (via Docker) — never mock the underlying DB in adapter tests, since the whole point of the adapter is faithfully translating to real native behavior.
 
 ## 5. BYODB (Bring Your Own Database) connection flow
 
@@ -121,3 +122,35 @@ When adding support for a new database engine, an implementer should:
 3. Platform attempts a test connection immediately using that adapter, read-only introspection call (`ListCollections()`), before saving anything.
 4. On success, credentials are encrypted and stored (see `SCHEMA.md` §2 `connections` table); the project is now backed by that adapter exactly as if it were provisioned in-platform — same capability-flag-driven feature set applies.
 5. On failure, surface the adapter's actual connection error to the user rather than a generic message — connection failures are one of the most common support burdens for platforms like this.
+
+## 6. `RawQuerier` — the SQL editor's escape hatch
+
+The universal query IR deliberately covers only what every engine can express (collection, equality/comparison filters, sort, limit). The SQL editor needs the opposite: the engine's *full* native language, reads **and** writes. That is the optional `RawQuerier` interface:
+
+```go
+type RawQuerier interface {
+    ExecRaw(ctx context.Context, query string) (ResultSet, error)
+}
+```
+
+Rules every implementation follows:
+
+- **Reads and writes both run.** DDL and DML are not blocked — this is the user's own database and the editor is the tool for changing it. The server-side guard only rejects empty/oversized input and stacked statements (`SELECT 1; DROP TABLE x`), so one Run executes exactly one statement.
+- **Results are normalized into `ResultSet`.** Row-returning statements fill `Columns`/`Rows` capped at `MaxRawRows` (200). Writes report what happened as a single row: `affected_rows` (plus `insert_id` on MySQL, `matched_count`/`modified_count`/`deleted_count`/`inserted_id` on FerretDB) or `{"result": "OK"}` for DDL, so the editor never shows a confusing empty grid after a successful write.
+- **Errors surface verbatim.** The engine's own message reaches the user; nothing is swallowed or rewritten.
+- **Timeouts come from the context.** The server wraps every call in a 15s deadline.
+
+Per-engine language (as shipped):
+
+| Engine | Raw language accepted by `ExecRaw` |
+|---|---|
+| PostgreSQL | SQL: `SELECT`/`WITH`/`EXPLAIN` plus `INSERT`/`UPDATE`/`DELETE` (incl. `RETURNING`) and DDL |
+| MySQL | SQL: reads (`SELECT`/`WITH`/`EXPLAIN`/`SHOW`/`DESCRIBE`) routed to Query, everything else to Exec |
+| ArcadeDB | ArcadeDB SQL: `SELECT` via `POST /api/v1/query`, writes/DDL via `POST /api/v1/command` |
+| FerretDB | mongo-shell: `db.<coll>.find/insertOne/insertMany/updateOne/updateMany/deleteOne/deleteMany/countDocuments/drop`, `db.createCollection`, `.limit().skip().sort()` chains, plus a `{"collection","op",…}` JSON form |
+| Valkey | Redis commands (`GET`/`SET`/`HSET`/`DEL`/`KEYS`/…), one per line, redis-cli-style quoting; the last result is returned |
+| Qdrant | `SCROLL`/`SEARCH`/`UPSERT`/`DELETE`/`CREATE`/`DROP <collection> [json]`, plus a `{"collection","op",…}` JSON form |
+
+An adapter that genuinely has no raw language simply doesn't implement the interface, and the server answers `400 raw queries are not supported for this engine` rather than faking execution.
+
+**Plumbing note:** the engine package's `Conn` wrapper must forward `ExecRaw` to the underlying adapter. It is the type the server actually holds, so a missing forwarder makes the server's `adapter.RawQuerier` type-assertion fail for *every* engine — which is exactly how the editor once reported "raw SQL is only supported for postgres and mysql" even on Postgres.

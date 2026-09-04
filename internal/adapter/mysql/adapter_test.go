@@ -333,3 +333,119 @@ func TestBytesToValue(t *testing.T) {
 		}
 	}
 }
+
+func TestIsReadStatement(t *testing.T) {
+	reads := []string{
+		"SELECT 1",
+		"  select * from users",
+		"WITH x AS (SELECT 1) SELECT * FROM x",
+		"EXPLAIN SELECT 1",
+		"SHOW TABLES",
+		"DESCRIBE users",
+		"-- comment\nSELECT 1",
+		"/* block */ SELECT 1",
+		"(SELECT 1)",
+	}
+	for _, q := range reads {
+		if !isReadStatement(q) {
+			t.Errorf("isReadStatement(%q) = false, want true", q)
+		}
+	}
+	writes := []string{
+		"INSERT INTO users (a) VALUES (1)",
+		"update users set a = 1",
+		"DELETE FROM users",
+		"CREATE TABLE t (id int)",
+		"ALTER TABLE t ADD COLUMN x int",
+		"DROP TABLE t",
+		"TRUNCATE t",
+		"-- note\nINSERT INTO t VALUES (1)",
+	}
+	for _, q := range writes {
+		if isReadStatement(q) {
+			t.Errorf("isReadStatement(%q) = true, want false", q)
+		}
+	}
+}
+
+func TestExecRawReadReturnsRows(t *testing.T) {
+	a, mock := newMock(t)
+	rows := sqlmock.NewRows([]string{"id", "name"}).
+		AddRow([]byte("1"), []byte("Ada"))
+	mock.ExpectQuery("SELECT id, name FROM `users`").WillReturnRows(rows)
+
+	res, err := a.ExecRaw(context.Background(), "SELECT id, name FROM `users`")
+	if err != nil {
+		t.Fatalf("ExecRaw: %v", err)
+	}
+	if len(res.Columns) != 2 || len(res.Rows) != 1 {
+		t.Fatalf("got %d cols %d rows: %+v", len(res.Columns), len(res.Rows), res)
+	}
+	if res.Rows[0]["name"] != "Ada" {
+		t.Errorf("name = %v, want Ada", res.Rows[0]["name"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecRawInsertReportsAffectedAndInsertID(t *testing.T) {
+	a, mock := newMock(t)
+	mock.ExpectExec("INSERT INTO `users`").WillReturnResult(sqlmock.NewResult(42, 1))
+
+	res, err := a.ExecRaw(context.Background(), "INSERT INTO `users` (name) VALUES ('Ada')")
+	if err != nil {
+		t.Fatalf("ExecRaw insert: %v", err)
+	}
+	if len(res.Rows) != 1 {
+		t.Fatalf("expected 1 result row, got %+v", res)
+	}
+	if res.Rows[0]["affected_rows"] != int64(1) {
+		t.Errorf("affected_rows = %v, want 1", res.Rows[0]["affected_rows"])
+	}
+	if res.Rows[0]["insert_id"] != int64(42) {
+		t.Errorf("insert_id = %v, want 42", res.Rows[0]["insert_id"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecRawUpdateReportsAffected(t *testing.T) {
+	a, mock := newMock(t)
+	mock.ExpectExec("UPDATE `users` SET").WillReturnResult(sqlmock.NewResult(0, 3))
+
+	res, err := a.ExecRaw(context.Background(), "UPDATE `users` SET active = 1")
+	if err != nil {
+		t.Fatalf("ExecRaw update: %v", err)
+	}
+	if res.Rows[0]["affected_rows"] != int64(3) {
+		t.Errorf("affected_rows = %v, want 3", res.Rows[0]["affected_rows"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecRawDDLReportsOK(t *testing.T) {
+	a, mock := newMock(t)
+	mock.ExpectExec("CREATE TABLE `t`").WillReturnResult(sqlmock.NewResult(0, 0))
+
+	res, err := a.ExecRaw(context.Background(), "CREATE TABLE `t` (id int)")
+	if err != nil {
+		t.Fatalf("ExecRaw ddl: %v", err)
+	}
+	if res.Rows[0]["result"] != "OK" {
+		t.Errorf("result = %v, want OK", res.Rows[0]["result"])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecRawNotConnected(t *testing.T) {
+	a := &Adapter{}
+	if _, err := a.ExecRaw(context.Background(), "SELECT 1"); err == nil {
+		t.Fatal("expected not-connected error")
+	}
+}

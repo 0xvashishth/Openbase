@@ -27,6 +27,14 @@ type fakeQdrant struct {
 	mu     sync.Mutex
 	size   int
 	points map[string][]fakePoint
+
+	// Recorded request details so raw-execution tests can assert what the
+	// adapter actually sent.
+	lastScroll       map[string]any
+	lastSearchVector []float64
+	lastDelete       map[string]any
+	created          []string
+	dropped          []string
 }
 
 func newFakeQdrant(size int) *fakeQdrant {
@@ -67,7 +75,26 @@ func (f *fakeQdrant) Handler() http.Handler {
 				Limit  int            `json:"limit"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
-			writeResult(w, map[string]any{"points": f.points[name]})
+			f.lastScroll = req.Filter
+			pts := f.points[name]
+			if req.Limit > 0 && req.Limit < len(pts) {
+				pts = pts[:req.Limit]
+			}
+			writeResult(w, map[string]any{"points": pts})
+		case "/points/search":
+			var req struct {
+				Vector []float64      `json:"vector"`
+				Limit  int            `json:"limit"`
+				Filter map[string]any `json:"filter"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			f.lastSearchVector = req.Vector
+			pts := f.points[name]
+			if req.Limit > 0 && req.Limit < len(pts) {
+				pts = pts[:req.Limit]
+			}
+			// Qdrant search returns a bare array in "result".
+			writeResult(w, pts)
 		case "/points/payload":
 			var req struct {
 				Payload map[string]any `json:"payload"`
@@ -80,6 +107,12 @@ func (f *fakeQdrant) Handler() http.Handler {
 			}
 			writeResult(w, nil)
 		case "/points/delete":
+			var req struct {
+				Filter map[string]any `json:"filter"`
+				Points []any          `json:"points"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			f.lastDelete = map[string]any{"filter": req.Filter, "points": req.Points}
 			writeResult(w, nil)
 		case "/points":
 			if r.Method != http.MethodPut {
@@ -93,13 +126,28 @@ func (f *fakeQdrant) Handler() http.Handler {
 			f.points[name] = append(f.points[name], req.Points...)
 			writeResult(w, nil)
 		case "":
-			writeResult(w, map[string]any{
-				"config": map[string]any{
-					"params": map[string]any{
-						"vectors": map[string]any{"size": f.size, "distance": "Cosine"},
+			switch r.Method {
+			case http.MethodPut:
+				var cfg map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&cfg)
+				f.created = append(f.created, name)
+				if _, ok := f.points[name]; !ok {
+					f.points[name] = []fakePoint{}
+				}
+				writeResult(w, true)
+			case http.MethodDelete:
+				delete(f.points, name)
+				f.dropped = append(f.dropped, name)
+				writeResult(w, true)
+			default:
+				writeResult(w, map[string]any{
+					"config": map[string]any{
+						"params": map[string]any{
+							"vectors": map[string]any{"size": f.size, "distance": "Cosine"},
+						},
 					},
-				},
-			})
+				})
+			}
 		default:
 			http.NotFound(w, r)
 		}
