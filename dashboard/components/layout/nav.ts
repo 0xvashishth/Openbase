@@ -52,6 +52,7 @@ export const PROJECT_TOOLS = [
   "functions",
   "triggers",
   "realtime",
+  "connect",
   "db-source",
   "connection", // legacy alias for db-source
   "settings",

@@ -103,4 +103,18 @@ describe("ProjectSidebar (project selected)", () => {
     render(<ProjectSidebar {...base} hasConnection={false} currentPath="/orgs/o1/projects/p1" />);
     expect(screen.getByText("Tables").getAttribute("title")).toMatch(/db source/i);
   });
+
+  it("links Connect (outbound) alongside API Keys and never locks it", () => {
+    render(<ProjectSidebar {...base} hasConnection={false} currentPath="/orgs/o1/projects/p1" />);
+    expect(screen.getByRole("link", { name: /^connect$/i })).toHaveAttribute(
+      "href",
+      "/orgs/o1/projects/p1/connect"
+    );
+  });
+
+  it("marks Connect active without also activating DB Source", () => {
+    render(<ProjectSidebar {...base} hasConnection currentPath="/orgs/o1/projects/p1/connect" />);
+    expect(screen.getByRole("link", { name: /^connect$/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /db source/i })).not.toHaveAttribute("aria-current");
+  });
 });

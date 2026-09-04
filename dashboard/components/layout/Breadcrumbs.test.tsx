@@ -18,6 +18,10 @@ describe("toolLabel", () => {
     expect(toolLabel("connection")).toBe("DB Source");
   });
 
+  it("labels Connect separately from DB Source", () => {
+    expect(toolLabel("connect")).toBe("Connect");
+  });
+
   it("capitalizes unknown tools", () => {
     expect(toolLabel("billing")).toBe("Billing");
   });
@@ -107,6 +111,7 @@ describe("toolDescription", () => {
     expect(toolDescription("api-keys")).toMatch(/rest api/i);
     expect(toolDescription("db-source")).toMatch(/provision a database/i);
     expect(toolDescription("connection")).toMatch(/provision a database/i);
+    expect(toolDescription("connect")).toMatch(/connect your app/i);
     expect(toolDescription(null)).toMatch(/status and shortcuts/i);
   });
 

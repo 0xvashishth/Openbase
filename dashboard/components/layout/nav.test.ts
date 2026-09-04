@@ -51,4 +51,10 @@ describe("projectToolPath + normalizeTool", () => {
     // legacy slug stays routable so old bookmarks redirect
     expect(PROJECT_TOOLS).toContain("connection");
   });
+
+  it("keeps connect distinct from db-source", () => {
+    expect(normalizeTool("connect")).toBe("connect");
+    expect(PROJECT_TOOLS).toContain("connect");
+    expect(projectToolPath("o", "p", "connect")).toBe("/orgs/o/projects/p/connect");
+  });
 });

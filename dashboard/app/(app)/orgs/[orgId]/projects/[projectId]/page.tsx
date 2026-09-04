@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Database, KeyRound, Network, Plug, Radio, SquareTerminal, Table2, Zap } from "lucide-react";
+import { Cable, Database, KeyRound, Network, Plug, Radio, SquareTerminal, Table2, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
@@ -26,6 +26,7 @@ function OverviewBody() {
     { href: `${base}/schema`, icon: Network, title: "Schema", desc: "Visual tables and relationships.", locked: !hasConnection },
     { href: `${base}/sql`, icon: SquareTerminal, title: "SQL Editor", desc: "Run queries with highlighting.", locked: !hasConnection },
     { href: `${base}/api`, icon: KeyRound, title: "API Keys", desc: "Auto-generated REST API access.", locked: false },
+    { href: `${base}/connect`, icon: Cable, title: "Connect", desc: "Wire your app to this project.", locked: false },
     { href: `${base}/functions`, icon: Zap, title: "Functions", desc: "Serverless event handlers.", locked: !hasConnection },
     { href: `${base}/triggers`, icon: Database, title: "Triggers", desc: "Data events → functions/webhooks.", locked: !hasConnection },
     { href: `${base}/realtime`, icon: Radio, title: "Realtime", desc: "Live WebSocket change streams.", locked: !hasConnection },

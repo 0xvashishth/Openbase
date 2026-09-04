@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  Cable,
   Database,
   Home,
   KeyRound,
@@ -161,6 +162,9 @@ export function ProjectSidebar({
           </NavLink>
         </NavSection>
         <NavSection label="Backend" collapsed={collapsed}>
+          <NavLink href={href("connect")} active={isActive("connect")} icon={<Cable className="h-3.5 w-3.5" />} collapsed={collapsed}>
+            Connect
+          </NavLink>
           <NavLink href={href("api")} active={isActive("api", ["api-keys"])} icon={<KeyRound className="h-3.5 w-3.5" />} collapsed={collapsed}>
             API Keys
           </NavLink>
