@@ -512,6 +512,12 @@ func (a *Adapter) Delete(ctx context.Context, filter adapter.Filter) (adapter.De
 	return adapter.DeleteResult{DeletedCount: tag.RowsAffected()}, nil
 }
 
+// realtimePayload is the pg_notify body shared by the broadcast and trigger
+// notify functions. `data` is the post-image for INSERT/UPDATE and the
+// pre-image for DELETE (NEW is null on delete, so COALESCE picks OLD) —
+// delete events therefore carry the deleted row instead of null.
+const realtimePayload = `jsonb_build_object('event', TG_OP, 'data', COALESCE(to_jsonb(NEW), to_jsonb(OLD)))::text`
+
 // RegisterTrigger wires a PL/pgSQL trigger so the platform's event is fired
 // natively via LISTEN/NOTIFY on a dedicated channel.
 func (a *Adapter) RegisterTrigger(ctx context.Context, t adapter.TriggerDefinition) error {
@@ -527,7 +533,10 @@ func (a *Adapter) RegisterTrigger(ctx context.Context, t adapter.TriggerDefiniti
 		CREATE OR REPLACE FUNCTION `+fnName+`() RETURNS trigger AS $$
 		BEGIN
 			PERFORM pg_notify('`+notifyChannel(t.Collection)+`',
-				jsonb_build_object('event', TG_OP, 'data', to_jsonb(NEW))::text);
+				`+realtimePayload+`);
+			IF TG_OP = 'DELETE' THEN
+				RETURN OLD;
+			END IF;
 			RETURN NEW;
 		END;
 		$$ LANGUAGE plpgsql`)
@@ -635,9 +644,17 @@ func parseNotify(payload string) (adapter.TriggerEvent, map[string]any) {
 	return adapter.TriggerUpdate, map[string]any{"payload": payload}
 }
 
-// RegisterRealtimeBroadcast installs a single trigger that notifies every row
-// operation (insert/update/delete) on a collection with the enriched payload.
-// Idempotent: recreates the trigger in place.
+// RegisterRealtimeBroadcast installs a per-collection trigger that notifies
+// every row operation (insert/update/delete) on a collection with the enriched
+// payload. All collections share one notify function; the target channel is
+// passed per trigger via TG_ARGV[0], so registering collection B can never
+// hijack collection A's notifications (the previous design baked one channel
+// into the shared function body). Idempotent: recreates the trigger in place.
+//
+// Upgrade note: triggers registered by the old version call the function with
+// no arguments. The COALESCE fallback re-derives the legacy channel from the
+// table name, so those triggers keep working until their collection is
+// re-registered (which happens on the next subscribe).
 func (a *Adapter) RegisterRealtimeBroadcast(ctx context.Context, collection string) error {
 	if err := a.requirePool(); err != nil {
 		return err
@@ -649,8 +666,12 @@ func (a *Adapter) RegisterRealtimeBroadcast(ctx context.Context, collection stri
 	_, err := a.pool.Exec(ctx, `
 		CREATE OR REPLACE FUNCTION openbase_rt_notify() RETURNS trigger AS $$
 		BEGIN
-			PERFORM pg_notify('`+notifyChannel(collection)+`',
-				jsonb_build_object('event', TG_OP, 'data', to_jsonb(NEW))::text);
+			PERFORM pg_notify(
+				COALESCE(TG_ARGV[0], 'openbase_' || regexp_replace(TG_TABLE_NAME, '[^a-zA-Z0-9_]', '_', 'g')),
+				`+realtimePayload+`);
+			IF TG_OP = 'DELETE' THEN
+				RETURN OLD;
+			END IF;
 			RETURN NEW;
 		END;
 		$$ LANGUAGE plpgsql`)
@@ -663,9 +684,12 @@ func (a *Adapter) RegisterRealtimeBroadcast(ctx context.Context, collection stri
 	if err != nil {
 		return fmt.Errorf("postgres: drop realtime trigger: %w", err)
 	}
+	// The channel travels as a trigger argument, never baked into the shared
+	// function. It is sanitized by notifyChannel, so interpolation is safe.
+	channel := strings.ReplaceAll(notifyChannel(collection), "'", "''")
 	_, err = a.pool.Exec(ctx,
 		"CREATE TRIGGER "+trgName+" AFTER INSERT OR UPDATE OR DELETE ON "+quote(collection)+
-			" FOR EACH ROW EXECUTE FUNCTION openbase_rt_notify()")
+			" FOR EACH ROW EXECUTE FUNCTION openbase_rt_notify('"+channel+"')")
 	if err != nil {
 		return fmt.Errorf("postgres: create realtime trigger: %w", err)
 	}

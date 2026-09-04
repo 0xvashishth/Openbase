@@ -418,3 +418,102 @@ func ctxDone(ctx context.Context) <-chan struct{} {
 	}()
 	return done
 }
+// TestRealtimeBroadcastMultiCollection proves two subscribed collections do
+// not cross-talk: each collection's trigger notifies its own channel even
+// after the other collection registers (the old shared function baked one
+// channel into its body, so the last registration hijacked every table). It
+// also proves DELETE delivers the deleted row instead of null data.
+func TestRealtimeBroadcastMultiCollection(t *testing.T) {
+	a := connect(t)
+	ctx := context.Background()
+
+	if err := a.RegisterRealtimeBroadcast(ctx, "users"); err != nil {
+		t.Fatalf("broadcast users: %v", err)
+	}
+	if err := a.RegisterRealtimeBroadcast(ctx, "tags"); err != nil {
+		t.Fatalf("broadcast tags: %v", err)
+	}
+
+	type change struct {
+		event adapter.TriggerEvent
+		data  map[string]any
+	}
+	usersCh := make(chan change, 8)
+	tagsCh := make(chan change, 8)
+	subU, err := a.SubscribeToChanges(ctx, "users", func(_ string, e adapter.TriggerEvent, rec map[string]any) {
+		usersCh <- change{e, rec}
+	})
+	if err != nil {
+		t.Fatalf("subscribe users: %v", err)
+	}
+	defer subU.Close()
+	subT, err := a.SubscribeToChanges(ctx, "tags", func(_ string, e adapter.TriggerEvent, rec map[string]any) {
+		tagsCh <- change{e, rec}
+	})
+	if err != nil {
+		t.Fatalf("subscribe tags: %v", err)
+	}
+	defer subT.Close()
+
+	next := func(ch chan change) (change, bool) {
+		select {
+		case c := <-ch:
+			return c, true
+		case <-time.After(5 * time.Second):
+			return change{}, false
+		}
+	}
+	drain := func(ch chan change) bool {
+		// The wrong channel must stay silent; allow a beat for a
+		// cross-talk notification to (not) arrive.
+		select {
+		case c := <-ch:
+			t.Errorf("cross-talk: unexpected event %v data=%v", c.event, c.data)
+			return true
+		case <-time.After(500 * time.Millisecond):
+			return false
+		}
+	}
+
+	if _, err := a.Insert(ctx, "users", map[string]any{"email": "rt@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := next(usersCh)
+	if !ok {
+		t.Fatal("no notification for users insert")
+	}
+	if got.event != adapter.TriggerInsert || got.data["email"] != "rt@example.com" {
+		t.Fatalf("users insert event = %v data = %v", got.event, got.data)
+	}
+	drain(tagsCh)
+
+	if _, err := a.Insert(ctx, "tags", map[string]any{"name": "news"}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok = next(tagsCh)
+	if !ok {
+		t.Fatal("no notification for tags insert")
+	}
+	if got.event != adapter.TriggerInsert || got.data["name"] != "news" {
+		t.Fatalf("tags insert event = %v data = %v", got.event, got.data)
+	}
+	drain(usersCh)
+
+	// DELETE must deliver the deleted row, not null data.
+	if _, err := a.Delete(ctx, adapter.Filter{Collection: "users", Conditions: []adapter.Condition{
+		{Field: "email", Operator: adapter.OpEqual, Value: "rt@example.com"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok = next(usersCh)
+	if !ok {
+		t.Fatal("no notification for users delete")
+	}
+	if got.event != adapter.TriggerDelete {
+		t.Fatalf("delete event = %v, want delete", got.event)
+	}
+	if got.data == nil || got.data["email"] != "rt@example.com" {
+		t.Fatalf("delete data = %v, want the deleted row", got.data)
+	}
+	drain(tagsCh)
+}
