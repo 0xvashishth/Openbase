@@ -39,7 +39,6 @@ describe("ProjectSidebar (project selected)", () => {
     orgId: "o1",
     projectId: "p1",
     projectName: "Shop",
-    engine: "postgres",
   };
 
   it("groups tools and marks the active tool", () => {
@@ -48,6 +47,16 @@ describe("ProjectSidebar (project selected)", () => {
     expect(screen.getByText("Backend")).toBeInTheDocument();
     expect(screen.getByText("Configure")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /tables/i })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("stays clean: back link only, no duplicated project name or connection badges", () => {
+    render(<ProjectSidebar {...base} hasConnection currentPath="/orgs/o1/projects/p1" />);
+    expect(screen.getByText("Back to projects")).toBeInTheDocument();
+    // project name lives in the page header/breadcrumbs, not the sidebar
+    expect(screen.queryByText("Shop")).not.toBeInTheDocument();
+    // connection status lives under the breadcrumbs in the top header now
+    expect(screen.queryByText("connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("postgres")).not.toBeInTheDocument();
   });
 
   it("locks gated tools when no database is connected", () => {
@@ -62,7 +71,6 @@ describe("ProjectSidebar (project selected)", () => {
       <ProjectSidebar
         {...base}
         hasConnection
-        connected
         supportsTriggers={false}
         supportsRealtime={false}
         currentPath="/orgs/o1/projects/p1"
@@ -70,11 +78,5 @@ describe("ProjectSidebar (project selected)", () => {
     );
     expect(screen.getByText("Triggers").getAttribute("title")).toMatch(/trigger/i);
     expect(screen.getByText("Realtime").getAttribute("title")).toMatch(/realtime/i);
-  });
-
-  it("shows engine + connection badges", () => {
-    render(<ProjectSidebar {...base} connected engine="postgres" currentPath="/orgs/o1/projects/p1" />);
-    expect(screen.getByText("postgres")).toBeInTheDocument();
-    expect(screen.getByText("connected")).toBeInTheDocument();
   });
 });

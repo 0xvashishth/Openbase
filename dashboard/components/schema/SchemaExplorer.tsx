@@ -34,7 +34,7 @@ function TableNode({ data }: { data: Record<string, any> }) {
   return (
     <div className="min-w-[190px] max-w-[270px] overflow-hidden rounded-lg border-2 border-border bg-card text-xs shadow-sm">
       <div className="border-b border-border bg-muted px-2.5 py-1.5 font-semibold text-foreground">
-        {schema?.collection ?? "unknown"}
+        {(schema?.collection as string) ?? (schema as unknown as { name?: string })?.name ?? "unknown"}
       </div>
       <div className="py-1">
         {shown.map((col) => (
@@ -188,7 +188,7 @@ export function SchemaExplorer({
         <EmptyState title="No tables match" hint={`Nothing matches "${filter.trim()}".`} />
       )}
 
-      <div className="h-[500px] overflow-hidden rounded-lg border border-border bg-background">
+      <div className="h-[380px] overflow-hidden rounded-lg border border-border bg-background sm:h-[500px]">
         <ReactFlow
           nodes={nodes}
           edges={edges}

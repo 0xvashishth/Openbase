@@ -32,7 +32,7 @@ function OverviewBody() {
   ];
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="mx-auto w-full max-w-4xl space-y-4">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -62,11 +62,11 @@ function OverviewBody() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {tools.map((t) => (
-          <Link key={t.title} href={t.href} aria-disabled={t.locked || undefined}>
-            <Card className="h-full transition-shadow hover:shadow-md">
-              <CardContent className="p-4 pt-4">
+          <Link key={t.title} href={t.href} aria-disabled={t.locked || undefined} className="block h-full min-w-0">
+            <Card className="flex h-full flex-col transition-colors hover:border-foreground/25 hover:shadow-sm">
+              <CardContent className="flex flex-1 flex-col justify-center p-4 pt-4 sm:p-4 sm:pt-4">
                 <div className="flex items-center gap-2">
                   <t.icon className="h-4 w-4 text-muted-foreground" aria-hidden />
                   <p className="text-sm font-semibold text-foreground">{t.title}</p>
@@ -86,7 +86,7 @@ export default function ProjectOverviewPage() {
   return (
     <div>
       <ProjectHeader title="Overview" subtitle="Project status and shortcuts." />
-      <div className="mx-auto max-w-6xl px-6 py-6">
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
         <ProjectGuard>
           <OverviewBody />
         </ProjectGuard>

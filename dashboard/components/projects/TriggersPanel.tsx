@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorBanner,
   Input,
   Label,
 } from "@/components/ui";
+import { StatusBadge } from "@/components/ui/badge";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import type { Function, Trigger, TriggerActionType, TriggerEvent } from "@/lib/types";
 
@@ -277,12 +277,16 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
             {triggers.map((t) => (
               <div
                 key={t.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{t.name}</span>
-                    {t.enabled ? <Badge tone="green">enabled</Badge> : <Badge tone="slate">disabled</Badge>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">{t.name}</span>
+                    {t.enabled ? (
+                      <StatusBadge tone="success">enabled</StatusBadge>
+                    ) : (
+                      <StatusBadge tone="muted">disabled</StatusBadge>
+                    )}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     when{" "}

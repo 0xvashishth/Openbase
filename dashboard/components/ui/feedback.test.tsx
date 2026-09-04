@@ -22,9 +22,11 @@ describe("feedback primitives", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Connected!");
   });
 
-  it("PageHeader renders title + subtitle", () => {
+  it("PageHeader renders title + info tooltip instead of inline subtitle", () => {
     render(<PageHeader title="Organizations" subtitle="Everything lives inside an org." />);
-    expect(screen.getByRole("heading", { name: "Organizations" })).toBeInTheDocument();
-    expect(screen.getByText("Everything lives inside an org.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Organizations/ })).toBeInTheDocument();
+    // description moved to info icon tooltip, not inline text
+    expect(screen.queryByText("Everything lives inside an org.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "About Organizations" })).toBeInTheDocument();
   });
 });

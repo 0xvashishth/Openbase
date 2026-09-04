@@ -20,9 +20,10 @@ type fullSchema struct {
 }
 
 type schemaCollection struct {
-	Name    string               `json:"name"`
-	Columns []adapter.ColumnInfo `json:"columns"`
-	Indexes []adapter.IndexInfo  `json:"indexes,omitempty"`
+	Collection string               `json:"collection"`
+	Name       string               `json:"name"`
+	Columns    []adapter.ColumnInfo `json:"columns"`
+	Indexes    []adapter.IndexInfo  `json:"indexes,omitempty"`
 }
 
 func (s *Server) getFullSchema(w http.ResponseWriter, r *http.Request) {
@@ -59,9 +60,10 @@ func (s *Server) getFullSchema(w http.ResponseWriter, r *http.Request) {
 			idx = []adapter.IndexInfo{}
 		}
 		out = append(out, schemaCollection{
-			Name:    schema.Collection,
-			Columns: cols,
-			Indexes: idx,
+			Collection: schema.Collection,
+			Name:       schema.Collection,
+			Columns:    cols,
+			Indexes:    idx,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

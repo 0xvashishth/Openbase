@@ -38,9 +38,9 @@ export function OrgList() {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {orgs.map((org) => (
-        <Link key={org.id} href={`/orgs/${org.id}`} className="group">
-          <Card className="transition-shadow group-hover:shadow-md">
-            <CardContent className="p-4 pt-4">
+        <Link key={org.id} href={`/orgs/${org.id}`} className="group min-w-0">
+          <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+            <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="truncate font-semibold text-foreground">{org.name}</h3>
                 <Badge variant="secondary">{org.slug}</Badge>

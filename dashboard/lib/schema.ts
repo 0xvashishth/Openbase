@@ -7,8 +7,17 @@ import type { FullSchema, ResultSet, SchemaInfo } from "./types";
  * (`Cannot read properties of null (reading 'length')`).
  */
 export function normalizeSchemaInfo(s: SchemaInfo | null | undefined): SchemaInfo {
+  // Backend `/schema` historically returned `{name}` while `/collections/{id}`
+  // returns `{collection}` — accept both so the explorer never shows "unknown".
+  const raw = s as (Partial<SchemaInfo> & { name?: unknown }) | null | undefined;
+  const collection =
+    typeof raw?.collection === "string" && raw.collection
+      ? raw.collection
+      : typeof raw?.name === "string" && raw.name
+        ? raw.name
+        : "unknown";
   return {
-    collection: s?.collection ?? "unknown",
+    collection,
     columns: Array.isArray(s?.columns) ? (s!.columns as SchemaInfo["columns"]) : [],
     indexes: Array.isArray(s?.indexes) ? (s!.indexes as SchemaInfo["indexes"]) : [],
   };

@@ -12,6 +12,7 @@ import { ProjectSidebar } from "./ProjectSidebar";
 import { Topbar } from "./Topbar";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { StatusBar } from "./StatusBar";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { cn } from "@/lib/utils";
 
@@ -40,21 +41,22 @@ function RouteProgress({ currentPath }: { currentPath: string }) {
   );
 }
 
-function ProjectSidebarConnected({ currentPath }: { currentPath: string }) {
-  const { orgId, projectId, project, engine, hasConnection, supportsTriggers, supportsRealtime, loading } =
+function ProjectSidebarConnected({ currentPath, collapsed = false }: { currentPath: string; collapsed?: boolean }) {
+  const { orgId, projectId, project, hasConnection, supportsTriggers, supportsRealtime, loading } =
     useProject();
   return (
     <ProjectSidebar
       orgId={orgId}
       projectId={projectId}
       projectName={project?.name}
-      engine={engine}
-      connected={hasConnection}
+      // Gate tool-locking on settled data: while loading, hasConnection stays
+      // undefined so nothing renders a premature "not connected" state.
       hasConnection={loading ? undefined : hasConnection}
       supportsTriggers={loading ? undefined : supportsTriggers}
       supportsRealtime={loading ? undefined : supportsRealtime}
       currentPath={currentPath}
       loading={loading && !project}
+      collapsed={collapsed}
     />
   );
 }
@@ -64,8 +66,19 @@ function ProjectSidebarConnected({ currentPath }: { currentPath: string }) {
  * so tool pages can call useProject() with zero extra fetches.
  */
 function ProjectTopbar({ orgName, orgLoading }: { orgName?: string; orgLoading?: boolean }) {
-  const { project, loading } = useProject();
-  return <Topbar orgName={orgName} orgLoading={orgLoading} projectName={project?.name} projectLoading={loading && !project} />;
+  const { project, engine, hasConnection, loading } = useProject();
+  return (
+    <Topbar
+      orgName={orgName}
+      orgLoading={orgLoading}
+      projectName={project?.name}
+      projectLoading={loading && !project}
+      engine={engine}
+      // Settled-only: undefined while loading so the header shows skeletons,
+      // never a premature "not connected".
+      connected={loading ? undefined : hasConnection}
+    />
+  );
 }
 
 function ProjectShell({
@@ -83,7 +96,7 @@ function ProjectShell({
   if (route.scope !== "project" || !route.orgId || !route.projectId) return <>{children}</>;
   return (
     <ProjectProvider orgId={route.orgId} projectId={route.projectId}>
-      <ProjectChrome currentPath={currentPath} orgName={orgName} orgLoading={orgLoading}>
+      <ProjectChrome currentPath={currentPath} orgId={route.orgId} orgName={orgName} orgLoading={orgLoading}>
         {children}
       </ProjectChrome>
     </ProjectProvider>
@@ -93,34 +106,39 @@ function ProjectShell({
 function ProjectChrome({
   currentPath,
   children,
+  orgId,
   orgName,
   orgLoading,
 }: {
   currentPath: string;
   children: React.ReactNode;
+  orgId?: string | null;
   orgName?: string;
   orgLoading?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
   React.useEffect(() => setMobileOpen(false), [currentPath]);
-  const sidebar = <ProjectSidebarConnected currentPath={currentPath} />;
   return (
     <div className="flex h-full flex-col">
-      <RouteProgress currentPath={currentPath} />
+      <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
       <ProjectTopbar orgName={orgName} orgLoading={orgLoading} />
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
             "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
-            collapsed ? "w-14" : "w-60"
+            collapsed ? "w-16" : "w-60"
           )}
         >
-          <div className="flex-1 overflow-hidden">{collapsed ? null : sidebar}</div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ProjectSidebarConnected currentPath={currentPath} collapsed={collapsed} />
+          </div>
           <div className="border-t border-border p-2">
             <button
               onClick={() => setCollapsed((v) => !v)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -129,7 +147,7 @@ function ProjectChrome({
         </aside>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent side="left" className="w-72 p-0 md:hidden">
-            {sidebar}
+            <ProjectSidebarConnected currentPath={currentPath} collapsed={false} />
           </SheetContent>
         </Sheet>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -148,6 +166,7 @@ function ProjectChrome({
 function ShellChrome({
   currentPath,
   sidebar,
+  orgId,
   orgName,
   orgLoading,
   projectName,
@@ -156,6 +175,7 @@ function ShellChrome({
 }: {
   currentPath: string;
   sidebar: React.ReactNode;
+  orgId?: string | null;
   orgName?: string;
   orgLoading?: boolean;
   projectName?: string;
@@ -167,22 +187,34 @@ function ShellChrome({
 
   React.useEffect(() => setMobileOpen(false), [currentPath]);
 
+  // Inject the rail state into whatever sidebar element was provided
+  // (PlatformSidebar / OrgSidebar). They accept an optional `collapsed` prop;
+  // cloning keeps call sites unchanged so other in-flight work doesn't clash.
+  const renderSidebar = (isCollapsed: boolean) =>
+    React.isValidElement(sidebar)
+      ? React.cloneElement(sidebar as React.ReactElement<{ collapsed?: boolean }>, {
+          collapsed: isCollapsed,
+        })
+      : sidebar;
+
   return (
     <div className="flex h-full flex-col">
-      <RouteProgress currentPath={currentPath} />
+      <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
       <Topbar orgName={orgName} orgLoading={orgLoading} projectName={projectName} projectLoading={projectLoading} />
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
             "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
-            collapsed ? "w-14" : "w-60"
+            collapsed ? "w-16" : "w-60"
           )}
         >
-          <div className="flex-1 overflow-hidden">{collapsed ? null : sidebar}</div>
+          <div className="flex-1 min-h-0 overflow-hidden">{renderSidebar(collapsed)}</div>
           <div className="border-t border-border p-2">
             <button
               onClick={() => setCollapsed((v) => !v)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -191,7 +223,7 @@ function ShellChrome({
         </aside>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent side="left" className="w-72 p-0 md:hidden">
-            {sidebar}
+            {renderSidebar(false)}
           </SheetContent>
         </Sheet>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -239,6 +271,7 @@ function ShellInner({ children, currentPath }: { children: React.ReactNode; curr
       <ShellChrome
         currentPath={currentPath}
         sidebar={<OrgSidebar orgId={route.orgId} orgName={orgName} loading={orgLoading && !orgName} currentPath={currentPath} />}
+        orgId={route.orgId}
         orgName={orgName}
         orgLoading={orgLoading && !orgName}
       >

@@ -51,13 +51,6 @@ export default function ProjectsPage() {
         }
       />
       <div className="mx-auto max-w-5xl px-6 py-6">
-        <div className="mb-4 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-          Tip: pick an organization first — project tools live inside{" "}
-          <Link href="/orgs" className="font-medium text-foreground underline underline-offset-4">
-            Organizations → Projects
-          </Link>
-          , Supabase-style. This global view is a search shortcut.
-        </div>
         {error && (
           <p role="alert" className="text-sm text-destructive">{error}</p>
         )}
@@ -77,11 +70,11 @@ export default function ProjectsPage() {
                 <p className="text-sm text-muted-foreground">No projects in this org yet.</p>
               )}
               {projects.map((p) => (
-                <Link key={p.id} href={`/orgs/${org.id}/projects/${p.id}`} className="group">
-                  <Card className="transition-shadow group-hover:shadow-md">
-                    <CardContent className="p-4 pt-4">
-                      <h3 className="font-semibold text-foreground">{p.name}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">{p.slug}</p>
+                <Link key={p.id} href={`/orgs/${org.id}/projects/${p.id}`} className="group min-w-0">
+                  <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+                    <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
+                      <h3 className="truncate font-semibold text-foreground">{p.name}</h3>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{p.slug}</p>
                     </CardContent>
                   </Card>
                 </Link>

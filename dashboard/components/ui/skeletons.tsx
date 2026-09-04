@@ -66,7 +66,7 @@ export function FormSkeleton({ label = "Loading form" }: { label?: string }) {
 /** Matches the project overview layout: header card + 6 tool tiles. */
 export function ProjectOverviewSkeleton() {
   return (
-    <LoadingRegion label="Loading project" className="max-w-4xl space-y-4">
+    <LoadingRegion label="Loading project" className="mx-auto w-full max-w-4xl space-y-4">
       <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-5 w-40" />

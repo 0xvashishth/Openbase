@@ -34,9 +34,9 @@ export function ProjectList({ orgId }: { orgId: string }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((p) => (
-        <Link key={p.id} href={`/orgs/${orgId}/projects/${p.id}`} className="group">
-          <Card className="transition-shadow group-hover:shadow-md">
-            <CardContent className="p-4 pt-4">
+        <Link key={p.id} href={`/orgs/${orgId}/projects/${p.id}`} className="group min-w-0">
+          <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+            <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="truncate font-semibold text-foreground">{p.name}</h3>
                 <Badge variant="muted">{p.slug}</Badge>

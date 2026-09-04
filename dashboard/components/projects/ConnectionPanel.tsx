@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { TableBrowser } from "@/components/data/TableBrowser";
-import { Badge, Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
+import { Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableBrowserSkeleton } from "@/components/ui/skeletons";
 import type { Connection } from "@/lib/types";
@@ -38,9 +39,16 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  const isAutoProvision = mode === "byodb" && !connString.trim();
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (mode === "byodb" && !connString.trim()) return;
+    // Empty connection string => auto-provision a Postgres instance (backend
+    // fallback when both mode and connection_string are empty). We send an
+    // explicit provisioned request so the intent is clear even if the backend
+    // fallback ever changes.
+    const effectiveMode = isAutoProvision ? "provisioned" : mode;
+    const effectiveEngine = effectiveMode === "provisioned" ? (mode === "provisioned" ? engine : "postgres") : undefined;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -51,13 +59,15 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
         token,
         projectId,
         connString.trim(),
-        mode,
-        mode === "provisioned" ? engine : undefined
+        effectiveMode,
+        effectiveEngine
       );
       if (res.success) {
         setMessage(
-          mode === "provisioned"
-            ? `Provisioned a ${engine} database for this project.`
+          effectiveMode === "provisioned"
+            ? isAutoProvision
+              ? `No connection string provided — provisioned a Postgres database for this project.`
+              : `Provisioned a ${effectiveEngine ?? engine} database for this project.`
             : `Connected! Detected engine: ${res.engine ?? "unknown"}`
         );
         setConnString("");
@@ -100,7 +110,7 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
           {isInitialLoading ? "Loading connection…" : connected ? "Replace database" : "Set up a database"}
         </h2>
 
-        <div className="mb-3 flex max-w-xl gap-2">
+        <div className="mb-3 flex max-w-xl flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setMode("provisioned")}
@@ -132,7 +142,7 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="engine">Engine</Label>
-                <div className="mt-1 flex gap-2">
+                <div className="mt-1 flex flex-wrap gap-2">
                   {(["postgres", "ferretdb"] as EngineChoice[]).map((e) => (
                     <button
                       key={e}
@@ -177,7 +187,8 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
                 The engine is auto-detected from the URL scheme: postgres://, mysql://,
                 mongodb://, redis:// (Valkey), http(s)://…:6333 (Qdrant), or http(s)://…:2480
                 (ArcadeDB). Credentials are
-                encrypted at rest (SCHEMA.md §2).
+                encrypted at rest (SCHEMA.md §2). Leave empty to auto-provision a
+                Postgres database instead.
               </p>
             </div>
           )}
@@ -188,7 +199,11 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
             </div>
           )}
           <Button type="submit" loading={busy}>
-            {mode === "provisioned" ? "Provision database" : "Save connection"}
+            {mode === "provisioned"
+              ? "Provision database"
+              : isAutoProvision
+                ? "Auto-provision Postgres"
+                : "Save connection"}
           </Button>
         </form>
       </section>
@@ -206,10 +221,10 @@ export function ConnectionPanel({ projectId }: { projectId: string }) {
           </div>
         ) : connected ? (
           <div className="flex max-w-xl items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge tone="blue">{(conn as Connection).engine}</Badge>
-              <Badge tone="amber">{modeLabel}</Badge>
-              <Badge tone="green">connected</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{(conn as Connection).engine}</Badge>
+              <Badge variant="secondary">{modeLabel}</Badge>
+              <StatusBadge tone="success">connected</StatusBadge>
               {(conn as Connection).last_checked_at && (
                 <span className="text-xs text-muted-foreground">
                   checked {new Date((conn as Connection).last_checked_at!).toLocaleString()}

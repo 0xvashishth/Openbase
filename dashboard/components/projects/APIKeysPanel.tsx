@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
-import { Button, EmptyState, ErrorBanner, Input, Label, Badge } from "@/components/ui";
+import { Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
+import { Badge } from "@/components/ui/badge";
 import { FormSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import type { APIKeyView } from "@/lib/types";
 
@@ -122,13 +123,13 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
             {keys.map((k) => (
               <div
                 key={k.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
               >
-                <div>
-                  <span className="text-sm font-medium text-foreground">{k.name}</span>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-foreground">{k.name}</span>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>created {new Date(k.created_at).toLocaleDateString()}</span>
-                    {k.revoked_at && <Badge tone="red">revoked</Badge>}
+                    {k.revoked_at && <Badge variant="destructive">revoked</Badge>}
                   </div>
                 </div>
                 {!k.revoked_at && (

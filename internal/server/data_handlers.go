@@ -46,10 +46,19 @@ type saveConnectionRequest struct {
 }
 
 // saveConnection attaches a database to a project. Two modes (SCHEMA.md §3):
-//   - "byodb" (default): user-supplied connection string is detected, tested,
-//     encrypted and stored (ADAPTERS.md §5, SCHEMA.md §2).
+//   - "byodb" (default when a connection_string is supplied): user-supplied
+//     connection string is detected, tested, encrypted and stored (ADAPTERS.md
+//     §5, SCHEMA.md §2).
 //   - "provisioned": the platform provisions a dedicated instance, generating
 //     credentials that are encrypted and stored identically.
+//
+// Auto-provision fallback: when both mode and connection_string are omitted
+// (or empty — e.g. `{}` or an empty body), the handler defaults to
+// provisioning a Postgres instance instead of returning 400. This covers the
+// "no connection string" UX: a fresh project gets a database without the
+// caller having to know the provisioned-mode flag. An explicit
+// `mode: "byodb"` with an empty string is still a 400 (user error with a hint
+// pointing at the fallback).
 //
 // Idempotent: a second save overwrites the previous connection (and, for a
 // provisioned replacement, destroys the old instance).
@@ -70,9 +79,16 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mode := metadata.ConnectionMode(strings.TrimSpace(req.Mode))
+	rawMode := strings.TrimSpace(req.Mode)
+	connStr := strings.TrimSpace(req.ConnectionString)
+	mode := metadata.ConnectionMode(rawMode)
 	if mode == "" {
-		mode = metadata.ModeBYODB
+		if connStr == "" {
+			// No connection details at all: auto-provision Postgres.
+			mode = metadata.ModeProvisioned
+		} else {
+			mode = metadata.ModeBYODB
+		}
 	}
 	if mode != metadata.ModeBYODB && mode != metadata.ModeProvisioned {
 		writeError(w, http.StatusBadRequest, "mode must be \"byodb\" or \"provisioned\"")
@@ -86,36 +102,37 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if mode == metadata.ModeBYODB {
-		if strings.TrimSpace(req.ConnectionString) == "" {
-			writeError(w, http.StatusBadRequest, "connection_string is required")
+		if connStr == "" {
+			writeError(w, http.StatusBadRequest, "connection_string is required (omit connection_string and mode to auto-provision a Postgres instance)")
 			return
 		}
 		// Detect engine (allow an explicit override for ambiguous strings).
 		var err error
-		engine, err = adapter.DetectEngine(req.ConnectionString)
+		engine, err = adapter.DetectEngine(connStr)
 		if err != nil {
-			if req.Engine != "" {
-				engine = adapter.Engine(req.Engine)
+			if strings.TrimSpace(req.Engine) != "" {
+				engine = adapter.Engine(strings.TrimSpace(req.Engine))
 			} else {
 				writeError(w, http.StatusBadRequest, "could not detect engine; specify engine explicitly")
 				return
 			}
 		}
 		// Test before saving (ADAPTERS.md §5) with the adapter's real error surfaced.
-		if _, err := s.svc.AdapterFactory.TestConnection(r.Context(), req.ConnectionString); err != nil {
+		if _, err := s.svc.AdapterFactory.TestConnection(r.Context(), connStr); err != nil {
 			writeJSON(w, http.StatusOK, testConnectionResponse{Success: false, Engine: string(engine), Message: err.Error()})
 			return
 		}
-		secret = metadata.ConnectionSecret{ConnString: req.ConnectionString}
+		secret = metadata.ConnectionSecret{ConnString: connStr}
 	} else {
 		if s.svc.Provisioner == nil {
-			writeError(w, http.StatusNotImplemented, "provisioning is not configured")
+			writeError(w, http.StatusNotImplemented, "provisioning is not configured; provide a connection_string or enable it with OPENBASE_PROVISIONER_ENABLED=true")
 			return
 		}
-		// For now one engine; a picker arrives with Phase 2.
+		// Default engine for auto-provisioning is Postgres; an explicit
+		// engine (e.g. ferretdb) is respected when supplied.
 		engine = adapter.EnginePostgres
-		if req.Engine != "" {
-			engine = adapter.Engine(req.Engine)
+		if strings.TrimSpace(req.Engine) != "" {
+			engine = adapter.Engine(strings.TrimSpace(req.Engine))
 		}
 		var err error
 		inst, err = s.svc.Provisioner.Provision(r.Context(), Engine(engine))

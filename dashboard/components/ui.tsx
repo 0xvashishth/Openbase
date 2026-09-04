@@ -10,7 +10,7 @@ import { Button as NewButton } from "./ui/button";
 import { Input as NewInput } from "./ui/input";
 import { Label as NewLabel } from "./ui/label";
 import { Card as NewCard } from "./ui/card";
-import { LegacyBadge } from "./ui/badge";
+import { Badge as NewBadge } from "./ui/badge";
 import { EmptyState as NewEmpty, ErrorBanner as NewError, Spinner as NewSpinner } from "./ui/feedback";
 
 export function Spinner({ className = "" }: { className?: string }) {
@@ -49,14 +49,22 @@ export function Label({ htmlFor, children }: { htmlFor?: string; children: React
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <NewCard className={className}>{children}</NewCard>;
 }
+const badgeToneMap = {
+  green: "success",
+  amber: "warning",
+  red: "destructive",
+  slate: "muted",
+  blue: "secondary",
+} as const;
+
 export function Badge({
   tone = "slate",
   children,
 }: {
-  tone?: "green" | "amber" | "red" | "slate" | "blue";
+  tone?: keyof typeof badgeToneMap;
   children: React.ReactNode;
 }) {
-  return <LegacyBadge tone={tone}>{children}</LegacyBadge>;
+  return <NewBadge variant={badgeToneMap[tone]}>{children}</NewBadge>;
 }
 export const EmptyState = NewEmpty;
 export const ErrorBanner = NewError;

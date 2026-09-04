@@ -1,22 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { Badge, LegacyBadge } from "./badge";
+import { Badge, StatusBadge } from "./badge";
 
 describe("Badge", () => {
-  it("renders with default monochrome variant", () => {
+  it("renders as a truncated pill", () => {
     render(<Badge>postgres</Badge>);
-    expect(screen.getByText("postgres")).toBeInTheDocument();
+    const pill = screen.getByText("postgres").parentElement;
+    expect(pill?.className).toMatch(/rounded-full/);
   });
 
-  it("maps legacy tones to monochrome variants without blue/slate tailwind", () => {
-    const { rerender } = render(<LegacyBadge tone="green">connected</LegacyBadge>);
-    expect(screen.getByText("connected").className).toMatch(/bg-success/);
-    rerender(<LegacyBadge tone="red">error</LegacyBadge>);
-    expect(screen.getByText("error").className).toMatch(/bg-destructive/);
-    rerender(<LegacyBadge tone="blue">slug</LegacyBadge>);
-    // blue legacy tone must NOT emit brand/blue tailwind classes anymore
-    expect(screen.getByText("slug").className).not.toMatch(/brand|blue/);
+  it("is outlined by default (no solid fills)", () => {
+    const { rerender } = render(<Badge variant="success">connected</Badge>);
+    const pill = screen.getByText("connected").parentElement?.className ?? "";
+    expect(pill).toMatch(/border-success/);
+    expect(pill).toMatch(/bg-transparent/);
+    expect(pill).not.toMatch(/bg-success/);
+    rerender(<Badge variant="destructive">error</Badge>);
+    const err = screen.getByText("error").parentElement?.className ?? "";
+    expect(err).toMatch(/border-destructive/);
+    expect(err).not.toMatch(/bg-destructive/);
+  });
+});
+
+describe("StatusBadge", () => {
+  it("renders a liveness dot with muted pill styling", () => {
+    render(<StatusBadge tone="success">connected</StatusBadge>);
+    expect(screen.getByText("connected")).toBeInTheDocument();
+    expect(document.querySelector(".bg-success.rounded-full")).toBeInTheDocument();
+  });
+
+  it("defaults to muted tone", () => {
+    render(<StatusBadge>paused</StatusBadge>);
+    expect(screen.getByText("paused")).toBeInTheDocument();
   });
 });
 

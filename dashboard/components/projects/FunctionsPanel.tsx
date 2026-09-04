@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorBanner,
   Input,
   Label,
 } from "@/components/ui";
+import { Badge } from "@/components/ui/badge";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import type { Function } from "@/lib/types";
 
@@ -177,14 +177,14 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
         ) : (
           <div className="max-w-3xl space-y-2">
             {functions.map((f) => (
-              <div
-                key={f.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{f.name}</span>
-                    <Badge tone={f.runtime === "node" ? "green" : "blue"}>{f.runtime}</Badge>
+                <div
+                  key={f.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">{f.name}</span>
+                      <Badge variant="secondary">{f.runtime}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     created {new Date(f.created_at).toLocaleDateString()}

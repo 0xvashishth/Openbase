@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -223,9 +224,17 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 func decodeBody(r *http.Request, dst any) error {
+	if r.Body == nil {
+		return nil
+	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			// Empty body: leave dst as its zero value so callers can apply
+			// defaults (e.g. saveConnection auto-provisions Postgres).
+			return nil
+		}
 		return errors.New("invalid JSON body")
 	}
 	return nil

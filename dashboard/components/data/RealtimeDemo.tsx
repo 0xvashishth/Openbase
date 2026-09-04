@@ -220,11 +220,11 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             {collection} <span className="font-normal text-muted-foreground">(live)</span>
           </h3>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
             {rows.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">No rows yet.</div>
             ) : (
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[480px] text-left text-sm">
                 <thead className="bg-muted text-xs uppercase text-muted-foreground">
                   <tr>
                     {Object.keys(rows[0]).map((k) => (

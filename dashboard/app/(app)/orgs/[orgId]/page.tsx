@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Info, Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { ProjectList } from "@/components/projects/ProjectList";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Organization } from "@/lib/types";
 
 export default function OrgDetailPage() {
@@ -31,21 +32,33 @@ export default function OrgDetailPage() {
 
   return (
     <div>
-      <header className="border-b border-border bg-background px-6 py-5">
+      <header className="border-b border-border bg-background px-4 py-4 sm:px-6 sm:py-5">
         {org ? (
-          <>
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">{org.name}</h1>
-              <Badge variant="secondary">{org.slug}</Badge>
-            </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">Projects in this organization.</p>
-          </>
+          <h1 className="flex min-w-0 items-center gap-1.5 truncate text-lg font-semibold tracking-tight text-foreground">
+            <span className="truncate">{org.name}</span>
+            <Badge variant="secondary">{org.slug}</Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="About organization projects"
+                    className="shrink-0 rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Info className="h-4 w-4" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  Projects in this organization.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </h1>
         ) : error ? (
           <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : (
           <div className="space-y-2">
             <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-64" />
           </div>
         )}
       </header>
