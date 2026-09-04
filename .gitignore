@@ -24,3 +24,7 @@ dashboard/.env.local
 .vscode/
 .DS_Store
 *.swp
+opencode.json
+
+# TS incremental build cache (regenerated on every build)
+dashboard/tsconfig.tsbuildinfo
