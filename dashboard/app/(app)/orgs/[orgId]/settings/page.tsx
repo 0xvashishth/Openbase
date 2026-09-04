@@ -1,17 +1,14 @@
 "use client";
 
-import { EmptyState, PageHeader } from "@/components/ui/feedback";
+import { EmptyState } from "@/components/ui/feedback";
 
 export default function OrgSettingsPage() {
   return (
-    <div>
-      <PageHeader title="Organization settings" subtitle="Rename, slug and danger zone." />
-      <div className="mx-auto max-w-5xl px-6 py-6">
-        <EmptyState
-          title="Organization settings coming soon"
-          hint="Renaming and deleting organizations is available via the API. UI controls land after the project flow refactor."
-        />
-      </div>
+    <div className="mx-auto max-w-5xl px-6 py-6">
+      <EmptyState
+        title="Organization settings coming soon"
+        hint="Renaming and deleting organizations is available via the API. UI controls land after the project flow refactor."
+      />
     </div>
   );
 }

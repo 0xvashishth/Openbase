@@ -177,16 +177,6 @@ export function ConnectionSkeleton() {
   );
 }
 
-export function PageHeaderSkeleton() {
-  return (
-    <div role="status" aria-label="Loading header" className="space-y-2">
-      <Skeleton className="h-6 w-48" />
-      <Skeleton className="h-4 w-64" />
-      <span className="sr-only">Loading…</span>
-    </div>
-  );
-}
-
 export function AppShellSkeleton({ label = "Loading workspace" }: { label?: string }) {
   return (
     <LoadingRegion label={label} className="flex h-full">

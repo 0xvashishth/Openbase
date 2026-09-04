@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/feedback";
-import { ProjectGuard, ProjectHeader } from "@/components/projects/ProjectGuard";
+import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
 
 function SettingsBody() {
@@ -52,13 +52,10 @@ function SettingsBody() {
 export default function SettingsPage() {
   useParams<{ orgId: string; projectId: string }>();
   return (
-    <div>
-      <ProjectHeader title="Settings" subtitle="Project metadata and danger zone." />
-      <div className="mx-auto max-w-6xl px-6 py-6">
-        <ProjectGuard>
-          <SettingsBody />
-        </ProjectGuard>
-      </div>
+    <div className="mx-auto max-w-6xl px-6 py-6">
+      <ProjectGuard>
+        <SettingsBody />
+      </ProjectGuard>
     </div>
   );
 }

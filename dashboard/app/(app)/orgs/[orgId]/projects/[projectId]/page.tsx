@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/feedback";
 import { ProjectOverviewSkeleton } from "@/components/ui/skeletons";
-import { ProjectGuard, ProjectHeader } from "@/components/projects/ProjectGuard";
+import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
 
 function OverviewBody() {
@@ -84,13 +84,10 @@ function OverviewBody() {
 
 export default function ProjectOverviewPage() {
   return (
-    <div>
-      <ProjectHeader title="Overview" subtitle="Project status and shortcuts." />
-      <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <ProjectGuard>
-          <OverviewBody />
-        </ProjectGuard>
-      </div>
+    <div className="mx-auto w-full max-w-6xl px-6 py-6">
+      <ProjectGuard>
+        <OverviewBody />
+      </ProjectGuard>
     </div>
   );
 }

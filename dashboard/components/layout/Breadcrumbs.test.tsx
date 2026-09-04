@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Breadcrumbs, toolLabel } from "./Breadcrumbs";
+import { Breadcrumbs, toolDescription, toolLabel } from "./Breadcrumbs";
 
 describe("toolLabel", () => {
   it("maps slugs and legacy aliases to display names", () => {
@@ -82,5 +82,28 @@ describe("Breadcrumbs", () => {
       />
     );
     expect(screen.queryByRole("button", { name: "Switch organization" })).not.toBeInTheDocument();
+  });
+
+  it("renders a trailing info button when info is provided", () => {
+    render(<Breadcrumbs items={[{ label: "Tables" }]} info="Browse collections and rows." />);
+    expect(screen.getByRole("button", { name: "About Tables" })).toBeInTheDocument();
+  });
+
+  it("omits the info button when info is absent", () => {
+    render(<Breadcrumbs items={[{ label: "Tables" }]} />);
+    expect(screen.queryByRole("button", { name: "About Tables" })).not.toBeInTheDocument();
+  });
+});
+
+describe("toolDescription", () => {
+  it("maps tool slugs and aliases to descriptions", () => {
+    expect(toolDescription("tables")).toMatch(/browse collections/i);
+    expect(toolDescription("data")).toMatch(/browse collections/i);
+    expect(toolDescription("api-keys")).toMatch(/rest api/i);
+    expect(toolDescription(null)).toMatch(/status and shortcuts/i);
+  });
+
+  it("returns undefined for unknown tools", () => {
+    expect(toolDescription("billing")).toBeUndefined();
   });
 });

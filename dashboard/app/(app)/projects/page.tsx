@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState, PageHeader } from "@/components/ui/feedback";
+import { EmptyState } from "@/components/ui/feedback";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
 import type { Organization, Project } from "@/lib/types";
 
@@ -41,16 +41,7 @@ export default function ProjectsPage() {
   const total = allProjects.length;
 
   return (
-    <div>
-      <PageHeader
-        title="All projects"
-        subtitle={
-          data
-            ? `${total} project${total === 1 ? "" : "s"} across your organizations.`
-            : "Loading your projects…"
-        }
-      />
-      <div className="mx-auto max-w-5xl px-6 py-6">
+    <div className="mx-auto max-w-5xl px-6 py-6">
         {error && (
           <p role="alert" className="text-sm text-destructive">{error}</p>
         )}
@@ -82,7 +73,6 @@ export default function ProjectsPage() {
             </div>
           </section>
         ))}
-      </div>
     </div>
   );
 }

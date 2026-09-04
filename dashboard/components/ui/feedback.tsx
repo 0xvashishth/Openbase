@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Info } from "lucide-react";
 import { Skeleton as ShadcnSkeleton } from "@/components/ui/skeleton";
 import { Separator as ShadcnSeparator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -60,34 +58,5 @@ export function SuccessBanner({ message }: { message: string }) {
     <div role="status" className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
       {message}
     </div>
-  );
-}
-
-export function PageHeader({ title, subtitle, info }: { title: string; subtitle?: string; info?: string }) {
-  const tooltipText = info ?? subtitle;
-  return (
-    <header className="border-b border-border bg-background px-4 py-4 sm:px-6 sm:py-5">
-      <h1 className="flex min-w-0 items-center gap-1.5 truncate text-lg font-semibold tracking-tight text-foreground">
-        <span className="truncate">{title}</span>
-        {tooltipText && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`About ${title}`}
-                  className="shrink-0 rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Info className="h-4 w-4" aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-xs">
-                {tooltipText}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </h1>
-    </header>
   );
 }

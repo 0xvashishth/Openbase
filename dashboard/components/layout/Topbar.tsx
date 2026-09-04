@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Breadcrumbs, toolLabel, type Crumb } from "./Breadcrumbs";
+import { Breadcrumbs, toolDescription, toolLabel, type Crumb } from "./Breadcrumbs";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { parseRoute } from "./nav";
 import { useOrgList, useProjectList } from "./switchers";
@@ -77,8 +77,7 @@ export function Topbar({
   const crumbs: Crumb[] = (() => {
     if (route.scope === "platform") {
       return [{ label: pathname?.startsWith("/projects") ? "All projects" : "Organizations" }];
-    }
-    if (route.scope === "org" && route.orgId) {
+    }    if (route.scope === "org" && route.orgId) {
       return [
         { label: "Organizations", href: "/orgs", collapseBelow: "md" },
         {
@@ -126,13 +125,33 @@ export function Topbar({
     return [{ label: "Openbase" }];
   })();
 
+  // Page description for the trailing breadcrumb info icon. Per-page title
+  // headers were removed as redundant with the breadcrumb trail, so their
+  // subtitles live here instead.
+  const info: string | undefined = (() => {
+    if (route.scope === "platform") {
+      return pathname?.startsWith("/projects")
+        ? "Projects across all your organizations."
+        : "Everything in Openbase lives inside an organization.";
+    }
+    if (route.scope === "org") {
+      if (pathname?.endsWith("/members")) return "People with access to this organization.";
+      if (pathname?.endsWith("/settings")) return "Rename, slug and danger zone.";
+      return "Projects in this organization.";
+    }
+    if (route.scope === "project") {
+      return toolDescription(route.tool);
+    }
+    return undefined;
+  })();
+
   const showBadges = route.scope === "project";
   const badgesSettled = !projectLoading;
 
   return (
     <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-1.5 sm:gap-3 sm:px-4">
       <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
-        <Breadcrumbs items={crumbs} />
+        <Breadcrumbs items={crumbs} info={info} />
         {showBadges && (
           <div className="flex shrink-0 items-center gap-1.5" aria-label="Connection status">
             {!badgesSettled ? (

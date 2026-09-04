@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { QueryEditor } from "@/components/data/QueryEditor";
-import { ProjectGuard, ProjectHeader } from "@/components/projects/ProjectGuard";
+import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
 
 function EditorBody({ projectId }: { projectId: string }) {
@@ -13,13 +13,10 @@ function EditorBody({ projectId }: { projectId: string }) {
 export default function SqlPage() {
   const params = useParams<{ projectId: string }>();
   return (
-    <div>
-      <ProjectHeader title="SQL Editor" subtitle="Run read-only queries with syntax highlighting." />
-      <div className="mx-auto max-w-6xl px-6 py-6">
-        <ProjectGuard requireConnection toolName="SQL Editor">
-          <EditorBody projectId={params.projectId} />
-        </ProjectGuard>
-      </div>
+    <div className="mx-auto max-w-6xl px-6 py-6">
+      <ProjectGuard requireConnection toolName="SQL Editor">
+        <EditorBody projectId={params.projectId} />
+      </ProjectGuard>
     </div>
   );
 }

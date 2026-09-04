@@ -2,8 +2,14 @@
 
 import Link from "next/link";
 import { Fragment } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +41,31 @@ export function toolLabel(tool: string | null | undefined): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+/**
+ * One-line page descriptions, previously rendered as per-page title headers
+ * with an info icon. Those headers duplicated the breadcrumb trail, so the
+ * description now lives behind a trailing info icon in the breadcrumbs.
+ */
+const TOOL_DESCRIPTIONS: Record<string, string> = {
+  overview: "Project status and shortcuts.",
+  tables: "Browse collections and rows — like Supabase's table editor.",
+  schema: "Visual tables and relationships.",
+  sql: "Run read-only queries with syntax highlighting.",
+  api: "Keys for your auto-generated REST API.",
+  functions: "Serverless functions triggered by data events.",
+  triggers: "When X happens on a table, run a function or webhook.",
+  realtime: "Live WebSocket updates for native engines.",
+  connection: "Provision a database or connect your own.",
+  settings: "Project metadata and danger zone.",
+  members: "People with access to this organization.",
+};
+
+/** Description for a project tool slug (handles legacy aliases). */
+export function toolDescription(tool: string | null | undefined): string | undefined {
+  if (!tool) return TOOL_DESCRIPTIONS.overview;
+  return TOOL_DESCRIPTIONS[normalizeTool(tool)];
+}
+
 export interface CrumbDropdownItem {
   label: string;
   href: string;
@@ -60,10 +91,14 @@ export interface Crumb {
  * Supabase-style breadcrumb: chevron-separated ancestors as links,
  * current page as plain text with aria-current. Middle segments collapse
  * on small screens so the trail never overflows the header.
+ * An optional `info` description renders as a trailing info icon (the
+ * per-page title headers were removed as redundant with this trail).
  */
-export function Breadcrumbs({ items }: { items: Crumb[] }) {
+export function Breadcrumbs({ items, info }: { items: Crumb[]; info?: string }) {
+  const currentLabel = items.length > 0 ? items[items.length - 1].label : "page";
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
+      <div className="flex min-w-0 items-center gap-0.5">
       <ol className="flex min-w-0 items-center gap-1 text-sm">
         {items.map((item, i) => {
           const last = i === items.length - 1;
@@ -135,6 +170,25 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           );
         })}
       </ol>
+      {info && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`About ${currentLabel}`}
+                className="shrink-0 rounded p-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Info className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              {info}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      </div>
     </nav>
   );
 }
