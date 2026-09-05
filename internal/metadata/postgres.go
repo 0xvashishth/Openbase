@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -564,5 +565,337 @@ func mapError(err error) error {
 	if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
 		return fmt.Errorf("%w: %v", ErrConflict, err)
 	}
+	return err
+}
+
+// ---- Organizations ----
+
+func (s *Postgres) UpdateOrganization(ctx context.Context, org *Organization) error {
+	if org.UpdatedAt.IsZero() {
+		org.UpdatedAt = newTime()
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE organizations SET name = $2, slug = $3, updated_at = $4 WHERE id = $1`,
+		org.ID, org.Name, org.Slug, org.UpdatedAt)
+	if err != nil {
+		return mapError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) DeleteOrganization(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM organizations WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) CountProjects(ctx context.Context, orgID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM projects WHERE organization_id = $1`, orgID).Scan(&count)
+	return count, err
+}
+
+// ---- Members ----
+
+func (s *Postgres) ListMembersWithUsers(ctx context.Context, orgID string) ([]OrgMember, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT m.user_id, u.email, u.full_name, m.role, m.joined_at
+		FROM organization_members m
+		JOIN users u ON u.id = m.user_id
+		WHERE m.organization_id = $1
+		ORDER BY m.role DESC, m.joined_at`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []OrgMember
+	for rows.Next() {
+		var m OrgMember
+		if err := rows.Scan(&m.UserID, &m.Email, &m.FullName, &m.Role, &m.JoinedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Postgres) UpdateMemberRole(ctx context.Context, orgID, userID string, role OrgRole) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE organization_members SET role = $3 WHERE organization_id = $1 AND user_id = $2`,
+		orgID, userID, role)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) RemoveMember(ctx context.Context, orgID, userID string) error {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
+		orgID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) CountOwners(ctx context.Context, orgID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner'`, orgID).Scan(&count)
+	return count, err
+}
+
+func (s *Postgres) TransferOwnership(ctx context.Context, orgID, fromUserID, toUserID string, demoteFrom bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Verify fromUserID is currently an owner
+	var fromRole string
+	err = tx.QueryRow(ctx, `
+		SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
+		orgID, fromUserID).Scan(&fromRole)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if fromRole != "owner" {
+		return fmt.Errorf("user %s is not an owner", fromUserID)
+	}
+
+	// Verify toUserID is a member
+	var toExists bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2)`,
+		orgID, toUserID).Scan(&toExists)
+	if err != nil {
+		return err
+	}
+	if !toExists {
+		return ErrNotFound
+	}
+
+	// Promote toUserID to owner
+	_, err = tx.Exec(ctx, `
+		UPDATE organization_members SET role = 'owner' WHERE organization_id = $1 AND user_id = $2`,
+		orgID, toUserID)
+	if err != nil {
+		return err
+	}
+
+	// Demote fromUserID if requested
+	if demoteFrom {
+		_, err = tx.Exec(ctx, `
+			UPDATE organization_members SET role = 'admin' WHERE organization_id = $1 AND user_id = $2`,
+			orgID, fromUserID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ---- Invites ----
+
+func (s *Postgres) CreateInvite(ctx context.Context, i *Invite) error {
+	if i.ID == "" {
+		i.ID = newID()
+	}
+	if i.CreatedAt.IsZero() {
+		i.CreatedAt = newTime()
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO organization_invites (id, organization_id, email, role, token_hash, invited_by, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		i.ID, i.OrganizationID, i.Email, i.Role, i.TokenHash, i.InvitedBy, i.ExpiresAt, i.CreatedAt)
+	return mapError(err)
+}
+
+func (s *Postgres) GetInviteByToken(ctx context.Context, tokenHash string) (*Invite, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, accepted_at, created_at
+		FROM organization_invites WHERE token_hash = $1`, tokenHash)
+	var i Invite
+	err := row.Scan(&i.ID, &i.OrganizationID, &i.Email, &i.Role, &i.TokenHash, &i.InvitedBy, &i.ExpiresAt, &i.AcceptedAt, &i.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &i, nil
+}
+
+func (s *Postgres) ListInvites(ctx context.Context, orgID string) ([]Invite, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, accepted_at, created_at
+		FROM organization_invites WHERE organization_id = $1 ORDER BY created_at DESC`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Invite
+	for rows.Next() {
+		var i Invite
+		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.Email, &i.Role, &i.TokenHash, &i.InvitedBy, &i.ExpiresAt, &i.AcceptedAt, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+func (s *Postgres) RevokeInvite(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM organization_invites WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) AcceptInvite(ctx context.Context, tokenHash string, userID string) (*Membership, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	invite, err := s.GetInviteByToken(ctx, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	if invite.AcceptedAt != nil {
+		return nil, fmt.Errorf("invite already accepted")
+	}
+	if time.Now().After(invite.ExpiresAt) {
+		return nil, fmt.Errorf("invite expired")
+	}
+
+	// Check if user is already a member
+	var exists bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2)`,
+		invite.OrganizationID, userID).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		// Mark invite as accepted but don't create duplicate membership
+		now := newTime()
+		_, err = tx.Exec(ctx, `UPDATE organization_invites SET accepted_at = $1 WHERE id = $2`, now, invite.ID)
+		if err != nil {
+			return nil, err
+		}
+		invite.AcceptedAt = &now
+		return &Membership{
+			OrganizationID: invite.OrganizationID,
+			UserID:         userID,
+			Role:           invite.Role,
+			JoinedAt:       now,
+		}, tx.Commit(ctx)
+	}
+
+	now := newTime()
+	_, err = tx.Exec(ctx, `
+		INSERT INTO organization_members (organization_id, user_id, role, joined_at)
+		VALUES ($1, $2, $3, $4)`,
+		invite.OrganizationID, userID, invite.Role, now)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE organization_invites SET accepted_at = $1 WHERE id = $2`, now, invite.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Membership{
+		OrganizationID: invite.OrganizationID,
+		UserID:         userID,
+		Role:           invite.Role,
+		JoinedAt:       now,
+	}, tx.Commit(ctx)
+}
+
+func (s *Postgres) CleanupExpiredInvites(ctx context.Context) (int, error) {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM organization_invites WHERE expires_at < now() AND accepted_at IS NULL`)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// ---- Projects ----
+
+func (s *Postgres) UpdateProject(ctx context.Context, p *Project) error {
+	if p.UpdatedAt.IsZero() {
+		p.UpdatedAt = newTime()
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE projects SET name = $2, slug = $3, updated_at = $4 WHERE id = $1`,
+		p.ID, p.Name, p.Slug, p.UpdatedAt)
+	if err != nil {
+		return mapError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Postgres) DeleteProject(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM projects WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ---- Audit ----
+
+func (s *Postgres) AppendAuditEvent(ctx context.Context, e *AuditEvent) error {
+	if e.ID == "" {
+		e.ID = newID()
+	}
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = newTime()
+	}
+	metadataJSON, err := json.Marshal(e.Metadata)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO audit_events (id, actor_user_id, organization_id, project_id, action, target_type, target_id, metadata, ip, user_agent, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		e.ID, e.ActorUserID, e.OrganizationID, e.ProjectID, e.Action, e.TargetType, e.TargetID, metadataJSON, e.IP, e.UserAgent, e.CreatedAt)
 	return err
 }

@@ -164,6 +164,13 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/orgs", s.requireAuth(http.HandlerFunc(s.createOrg)))
 	mux.Handle("GET /v1/orgs", s.requireAuth(http.HandlerFunc(s.listOrgs)))
 	mux.Handle("GET /v1/orgs/{orgID}", s.requireAuth(http.HandlerFunc(s.getOrg)))
+	mux.Handle("PATCH /v1/orgs/{orgID}", s.requireAuth(http.HandlerFunc(s.updateOrg)))
+	mux.Handle("DELETE /v1/orgs/{orgID}", s.requireAuth(http.HandlerFunc(s.deleteOrg)))
+	mux.Handle("GET /v1/orgs/{orgID}/members", s.requireAuth(http.HandlerFunc(s.listMembers)))
+	mux.Handle("POST /v1/orgs/{orgID}/members", s.requireAuth(http.HandlerFunc(s.addMember)))
+	mux.Handle("PATCH /v1/orgs/{orgID}/members/{userID}", s.requireAuth(http.HandlerFunc(s.updateMemberRole)))
+	mux.Handle("DELETE /v1/orgs/{orgID}/members/{userID}", s.requireAuth(http.HandlerFunc(s.removeMember)))
+	mux.Handle("POST /v1/orgs/{orgID}/transfer-ownership", s.requireAuth(http.HandlerFunc(s.transferOwnership)))
 	mux.Handle("POST /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.createProject)))
 	mux.Handle("GET /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.listProjects)))
 

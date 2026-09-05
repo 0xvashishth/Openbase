@@ -55,6 +55,7 @@ type Organization struct {
 	Slug      string    `json:"slug"`
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Membership links a user to an organization with a role.
@@ -73,6 +74,7 @@ type Project struct {
 	Slug           string    `json:"slug"`
 	CreatedBy      string    `json:"created_by"`
 	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // ConnectionMode mirrors SCHEMA.md mode CHECK constraint.
@@ -177,6 +179,28 @@ type ConnectionSecret struct {
 	Password   string
 }
 
+// OrgMember is a membership with user details for UI display.
+type OrgMember struct {
+	UserID   string    `json:"user_id"`
+	Email    string    `json:"email"`
+	FullName string    `json:"full_name,omitempty"`
+	Role     OrgRole   `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+// Invite represents a pending organization invitation.
+type Invite struct {
+	ID             string    `json:"id"`
+	OrganizationID string    `json:"organization_id"`
+	Email          string    `json:"email"`
+	Role           OrgRole   `json:"role"`
+	TokenHash      string    `json:"-"`
+	InvitedBy      string    `json:"invited_by"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 // Store is the metadata repository contract. Implementations back onto the
 // platform's own Postgres database.
 type Store interface {
@@ -189,14 +213,32 @@ type Store interface {
 	CreateOrganization(ctx context.Context, org *Organization, creatorID string, role OrgRole) error
 	GetOrganization(ctx context.Context, id string) (*Organization, error)
 	ListOrganizationsForUser(ctx context.Context, userID string) ([]Organization, error)
+	UpdateOrganization(ctx context.Context, org *Organization) error
+	DeleteOrganization(ctx context.Context, id string) error
+	CountProjects(ctx context.Context, orgID string) (int, error)
 	AddMember(ctx context.Context, m *Membership) error
 	ListMembers(ctx context.Context, orgID string) ([]Membership, error)
+	ListMembersWithUsers(ctx context.Context, orgID string) ([]OrgMember, error)
 	GetMembership(ctx context.Context, orgID, userID string) (*Membership, error)
+	UpdateMemberRole(ctx context.Context, orgID, userID string, role OrgRole) error
+	RemoveMember(ctx context.Context, orgID, userID string) error
+	CountOwners(ctx context.Context, orgID string) (int, error)
+	TransferOwnership(ctx context.Context, orgID, fromUserID, toUserID string, demoteFrom bool) error
+
+	// Invites.
+	CreateInvite(ctx context.Context, i *Invite) error
+	GetInviteByToken(ctx context.Context, tokenHash string) (*Invite, error)
+	ListInvites(ctx context.Context, orgID string) ([]Invite, error)
+	RevokeInvite(ctx context.Context, id string) error
+	AcceptInvite(ctx context.Context, tokenHash string, userID string) (*Membership, error)
+	CleanupExpiredInvites(ctx context.Context) (int, error)
 
 	// Projects.
 	CreateProject(ctx context.Context, p *Project) error
 	GetProject(ctx context.Context, id string) (*Project, error)
 	ListProjects(ctx context.Context, orgID string) ([]Project, error)
+	UpdateProject(ctx context.Context, p *Project) error
+	DeleteProject(ctx context.Context, id string) error
 
 	// Connections.
 	CreateConnection(ctx context.Context, c *Connection) error
@@ -223,4 +265,22 @@ type Store interface {
 	GetFunction(ctx context.Context, projectID, id string) (*Function, error)
 	ListFunctions(ctx context.Context, projectID string) ([]Function, error)
 	DeleteFunction(ctx context.Context, projectID, id string) error
+
+	// Audit.
+	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
+}
+
+// AuditEvent represents a single audit log entry.
+type AuditEvent struct {
+	ID              string         `json:"id"`
+	ActorUserID     string         `json:"actor_user_id"`
+	OrganizationID  string         `json:"organization_id,omitempty"`
+	ProjectID       string         `json:"project_id,omitempty"`
+	Action          string         `json:"action"`
+	TargetType      string         `json:"target_type"`
+	TargetID        string         `json:"target_id,omitempty"`
+	Metadata        map[string]any `json:"metadata,omitempty"`
+	IP              string         `json:"ip,omitempty"`
+	UserAgent       string         `json:"user_agent,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
