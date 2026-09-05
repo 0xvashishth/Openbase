@@ -95,14 +95,10 @@ type createProjectRequest struct {
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	// Creating a project requires admin or owner (matrix: admin+)
-	_, err := s.authorizeOrgRole(r, orgID, metadata.RoleAdmin)
-	if err != nil {
-		if err == errForbidden {
-			s.forbiddenf(w, "admin role required to create projects")
-		} else {
-			s.writeErr(w, err)
-		}
+	// Creating a project requires admin or owner (matrix: admin+). The 403 body
+	// already names the required role — writeErr preserves the wrapped message.
+	if _, err := s.authorizeOrgRole(r, orgID, metadata.RoleAdmin); err != nil {
+		s.writeErr(w, err)
 		return
 	}
 
@@ -285,12 +281,6 @@ func (s *Server) deleteOrg(w http.ResponseWriter, r *http.Request) {
 
 // ---- Member management ----
 
-type memberView struct {
-	*metadata.Membership
-	Email    string `json:"email"`
-	FullName string `json:"full_name,omitempty"`
-}
-
 type addMemberRequest struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
@@ -305,11 +295,14 @@ type transferOwnershipRequest struct {
 	DemoteSelf bool   `json:"demote_self,omitempty"`
 }
 
-// listMembers handles GET /v1/orgs/{orgID}/members - member+ can list
+// listMembers handles GET /v1/orgs/{orgID}/members - member+ can list.
+//
+// Returns a bare array so the dashboard can render it directly; the caller's own
+// role already arrives with every org payload (orgView), so wrapping the list in
+// an envelope just to repeat it would be redundant.
 func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleMember)
-	if err != nil {
+	if _, err := s.authorizeOrgRole(r, orgID, metadata.RoleMember); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -318,23 +311,10 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	out := make([]memberView, 0, len(members))
-	for _, mb := range members {
-		out = append(out, memberView{
-			Membership: &metadata.Membership{
-				OrganizationID: mb.UserID,
-				UserID:         mb.UserID,
-				Role:           mb.Role,
-				JoinedAt:       mb.JoinedAt,
-			},
-			Email:    mb.Email,
-			FullName: mb.FullName,
-		})
+	if members == nil {
+		members = []metadata.OrgMember{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"members": out,
-		"role":    m.Role,
-	})
+	writeJSON(w, http.StatusOK, members)
 }
 
 // addMember handles POST /v1/orgs/{orgID}/members - admin+ can add existing users
@@ -482,37 +462,61 @@ func (s *Server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"role": newRole})
 }
 
-// removeMember handles DELETE /v1/orgs/{orgID}/members/{userID} - admin+ can remove, self can leave
+// removeMember handles DELETE /v1/orgs/{orgID}/members/{userID}.
+//
+// Admin+ may remove anyone (subject to the guards below); a member may remove
+// only themselves — that is "leave organization", which needs no elevated role.
+// So authorization starts at member and tightens to admin only when the target
+// is somebody else.
 func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")
-	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleAdmin)
+	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleMember)
 	if err != nil {
 		s.writeErr(w, err)
 		return
 	}
 
-	actorID := userIDFromContext(r.Context())
-
-	// Self-removal = leave organization
-	if userID == actorID {
-		// Owner cannot leave unless they transfer ownership first
-		if m.Role == metadata.RoleOwner {
-			writeError(w, http.StatusForbidden, "owners cannot leave; transfer ownership first")
-			return
-		}
-		if err := s.svc.Store.RemoveMember(r.Context(), orgID, userID); err != nil {
-			s.writeErr(w, err)
-			return
-		}
-		s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "remove_member_self", "membership", nil, nil)
-		writeJSON(w, http.StatusOK, map[string]any{"left": true})
+	isSelf := userID == m.UserID
+	if !isSelf && !m.Role.AtLeast(metadata.RoleAdmin) {
+		writeError(w, http.StatusForbidden, "forbidden: admin role required to remove other members")
 		return
 	}
 
-	// Removing another member
-	target, err := s.svc.Store.GetMembership(r.Context(), orgID, userID)
-	if err != nil {
+	target := m
+	if !isSelf {
+		target, err = s.svc.Store.GetMembership(r.Context(), orgID, userID)
+		if err != nil {
+			if errors.Is(err, metadata.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "member not found")
+				return
+			}
+			s.writeErr(w, err)
+			return
+		}
+		// Only an owner may remove an owner.
+		if target.Role == metadata.RoleOwner && m.Role != metadata.RoleOwner {
+			writeError(w, http.StatusForbidden, "forbidden: only owners can remove owners")
+			return
+		}
+	}
+
+	// Last-owner guard. This is a state conflict, not a permission failure: the
+	// caller is allowed to do this, there is simply no other owner to take over.
+	if target.Role == metadata.RoleOwner {
+		owners, err := s.svc.Store.CountOwners(r.Context(), orgID)
+		if err != nil {
+			s.writeErr(w, err)
+			return
+		}
+		if owners <= 1 {
+			writeError(w, http.StatusConflict,
+				"organization must keep at least one owner; transfer ownership first")
+			return
+		}
+	}
+
+	if err := s.svc.Store.RemoveMember(r.Context(), orgID, userID); err != nil {
 		if errors.Is(err, metadata.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "member not found")
 			return
@@ -521,28 +525,16 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Admin removing owner
-	if target.Role == metadata.RoleOwner && m.Role != metadata.RoleOwner {
-		writeError(w, http.StatusForbidden, "only owners can remove owners")
-		return
+	action := "remove_member"
+	if isSelf {
+		action = "leave_organization"
 	}
+	_ = s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", action, "membership", userID, nil)
 
-	// Last-owner guard
-	ownerCount, err := s.svc.Store.CountOwners(r.Context(), orgID)
-	if err != nil {
-		s.writeErr(w, err)
+	if isSelf {
+		writeJSON(w, http.StatusOK, map[string]bool{"left": true})
 		return
 	}
-	if target.Role == metadata.RoleOwner && ownerCount <= 1 {
-		writeError(w, http.StatusConflict, "organization must have at least one owner")
-		return
-	}
-
-	if err := s.svc.Store.RemoveMember(r.Context(), orgID, userID); err != nil {
-		s.writeErr(w, err)
-		return
-	}
-	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "remove_member", "membership", target, nil)
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
 
@@ -656,8 +648,13 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
-// deleteProject handles DELETE /v1/projects/{projectID} - owner only
-// Cascade delete: destroy provisioned container, stop triggers, revoke keys, invalidate pool, delete project row
+// deleteProject handles DELETE /v1/projects/{projectID} — owner only.
+//
+// Ordered cascade, mirroring deleteConnection: destroy the provisioned
+// container FIRST and abort on failure, because the metadata row is the only
+// record of that container id. Deleting the row first and failing at Destroy
+// would orphan a container nobody can find. Child rows (connection, api_keys,
+// triggers, functions) are removed by ON DELETE CASCADE.
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	_, org, m, err := s.projectAndOrgRole(r, projectID, metadata.RoleOwner)
@@ -666,35 +663,36 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get connection to check for provisioned container
 	conn, err := s.svc.Store.GetConnectionByProject(r.Context(), projectID)
 	if err != nil && !errors.Is(err, metadata.ErrNotFound) {
 		s.writeErr(w, err)
 		return
 	}
 
-	// If provisioned, destroy the container first
-	if conn != nil && conn.Mode == metadata.ModeProvisioned && conn.ContainerID != nil && *conn.ContainerID != "" && s.svc.Provisioner != nil {
-		if err := s.svc.Provisioner.Destroy(r.Context(), projectID); err != nil {
-			s.writeErr(w, err)
+	if conn != nil && conn.Mode == metadata.ModeProvisioned && conn.ContainerID != nil &&
+		*conn.ContainerID != "" && s.svc.Provisioner != nil {
+		// Destroy takes a container id, not a project id.
+		if err := s.svc.Provisioner.Destroy(r.Context(), *conn.ContainerID); err != nil {
+			s.svc.Log.Error("failed to destroy provisioned instance",
+				"container_id", *conn.ContainerID, "project", projectID, "err", err)
+			writeError(w, http.StatusInternalServerError, "failed to destroy provisioned database; project not deleted")
 			return
 		}
 	}
 
-	// Stop triggers for this project
 	if s.svc.TriggerService != nil {
 		s.svc.TriggerService.StopProject(projectID)
 	}
 
-	// Invalidate adapter pool and pkCache
+	// Drop the pooled adapter and cached primary keys so nothing reads through a
+	// live session to a project that no longer exists.
 	s.invalidateProjectAdapters(projectID)
 
-	// Delete project (cascades to connections, api_keys, triggers, functions via DB)
 	if err := s.svc.Store.DeleteProject(r.Context(), projectID); err != nil {
 		s.writeErr(w, err)
 		return
 	}
-	s.svc.AuditSink.Record(r.Context(), m.UserID, org.ID, projectID, "delete_project", "project", nil, nil)
+	_ = s.svc.AuditSink.Record(r.Context(), m.UserID, org.ID, projectID, "delete_project", "project", projectID, nil)
 
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

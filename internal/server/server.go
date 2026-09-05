@@ -170,6 +170,11 @@ func (h handler) Close() { h.srv.Close() }
 // New builds a Server with all routes registered.
 func New(svc *Services) Handler {
 	mux := http.NewServeMux()
+	// Default the audit sink rather than nil-checking at ~15 call sites; a
+	// missed check would be a nil dereference on a mutating request.
+	if svc.AuditSink == nil {
+		svc.AuditSink = &NoopAuditSink{}
+	}
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 	s.adapters = s.newAdapterPool()
 

@@ -92,9 +92,3 @@ func (s *Server) authorizeProjectOrg(r *http.Request, projectID, orgID string) e
 	_, _, _, err := s.authorizeProjectOrgRole(r, projectID, orgID, metadata.RoleMember)
 	return err
 }
-
-// forbiddenf writes a 403 with a message that includes the required role,
-// so the dashboard can surface a real reason instead of "forbidden".
-func (s *Server) forbiddenf(w http.ResponseWriter, format string, args ...any) {
-	writeError(w, http.StatusForbidden, fmt.Sprintf(format, args...))
-}

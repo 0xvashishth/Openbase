@@ -606,12 +606,20 @@ func (s *Postgres) CountProjects(ctx context.Context, orgID string) (int, error)
 // ---- Members ----
 
 func (s *Postgres) ListMembersWithUsers(ctx context.Context, orgID string) ([]OrgMember, error) {
+	// Order by role RANK, not the role string: alphabetically 'owner' sorts
+	// above 'member' above 'admin', which would put admins last.
+	// password_hash is never selected.
 	rows, err := s.pool.Query(ctx, `
 		SELECT m.user_id, u.email, u.full_name, m.role, m.joined_at
 		FROM organization_members m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.organization_id = $1
-		ORDER BY m.role DESC, m.joined_at`, orgID)
+		ORDER BY CASE m.role
+			WHEN 'owner'  THEN 3
+			WHEN 'admin'  THEN 2
+			WHEN 'member' THEN 1
+			ELSE 0
+		END DESC, m.joined_at`, orgID)
 	if err != nil {
 		return nil, err
 	}
