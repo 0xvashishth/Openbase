@@ -29,6 +29,9 @@ type testServer struct {
 	base *httptest.Server
 	url  string
 	store metadata.Store
+	// svc is the live Services the handler was built from, so tests can swap a
+	// dependency (e.g. wrap AdapterFactory to count dials).
+	svc *server.Services
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -86,9 +89,11 @@ func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
 	svc.TriggerService = trigSvc
 	t.Cleanup(trigSvc.Stop)
 
-	ts := httptest.NewServer(server.New(svc))
+	h := server.New(svc)
+	t.Cleanup(h.Close) // dispose pooled project adapters
+	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return &testServer{base: ts, url: ts.URL, store: store}
+	return &testServer{base: ts, url: ts.URL, store: store, svc: svc}
 }
 
 func (ts *testServer) do(t *testing.T, method, path, token string, body any) (*http.Response, map[string]any) {

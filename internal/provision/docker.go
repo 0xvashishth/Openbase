@@ -99,7 +99,10 @@ func (p *Compose) provisionPostgres(ctx context.Context) (Instance, error) {
 	}
 	out, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
 	if err != nil {
-		_ = exec.CommandContext(ctx, "docker", "rm", "-f", name).Run()
+		// Failure path: nothing was ever handed to a user, so -v is
+		// unambiguous here — the anonymous data volume the image declares is
+		// pure garbage. (Destroy() deliberately does NOT pass -v; see there.)
+		_ = exec.CommandContext(ctx, "docker", "rm", "-f", "-v", name).Run()
 		return Instance{}, fmt.Errorf("starting provisioned container: %w: %s", err, out)
 	}
 
@@ -135,7 +138,9 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 	}
 
 	cleanup := func() {
-		_, _ = docker("rm", "-f", fName, pgName)
+		// Rollback of a half-built group: no user data can exist yet, so the
+		// anonymous volumes go with it.
+		_, _ = docker("rm", "-f", "-v", fName, pgName)
 		_, _ = docker("network", "rm", netName)
 	}
 
@@ -234,6 +239,14 @@ func (p *Compose) waitFerretReady(ctx context.Context, dsn string) error {
 
 // Destroy stops and removes a provisioned instance. It understands the grouped
 // FerretDB identifier and tears down the whole resource group.
+//
+// Deliberately WITHOUT `-v`: these containers hold the customer's actual
+// application data. Leaving the anonymous volume behind means an accidental
+// disconnect is recoverable by an operator (`docker volume ls`) instead of
+// being instant, silent data loss. PHASES.md 18.1 tracks moving provisioned
+// data onto named, explicitly-managed volumes; until then, orphaned volumes are
+// the deliberately safer failure mode. Test harnesses that create throwaway
+// containers do pass -v (see internal/testutil).
 func (p *Compose) Destroy(ctx context.Context, containerID string) error {
 	if containerID == "" {
 		return nil

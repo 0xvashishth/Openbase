@@ -52,8 +52,11 @@ func StartFerretDB(t *testing.T) *FerretDBContainer {
 	fPort := mustFreePort(t)
 
 	rmAll := func() {
-		_ = exec.Command("docker", "rm", "-f", fName).Run()
-		_ = exec.Command("docker", "rm", "-f", pgName).Run()
+		// -v removes the anonymous volumes both images declare. Without it a
+		// full suite run orphans one per container and never reclaims them
+		// (see the note in postgres.go — this filled the disk once already).
+		_ = exec.Command("docker", "rm", "-f", "-v", fName).Run()
+		_ = exec.Command("docker", "rm", "-f", "-v", pgName).Run()
 		_ = exec.Command("docker", "network", "rm", network).Run()
 	}
 	t.Cleanup(rmAll)

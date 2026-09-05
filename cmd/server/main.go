@@ -117,6 +117,7 @@ func run(log *slog.Logger) error {
 	}
 
 	handler := server.New(svc)
+	defer handler.Close() // dispose pooled project adapters on shutdown
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

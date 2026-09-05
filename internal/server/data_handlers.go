@@ -13,28 +13,16 @@ import (
 	"github.com/openbase/openbase/internal/metadata"
 )
 
-// connectProject dials the project's adapter using its stored (decrypted)
-// credentials. It returns the live adapter and its engine, or an error.
+// connectProject returns the project's pooled adapter and its engine. The
+// adapter is shared: its Disconnect is a no-op, so callers keep their
+// `defer a.Disconnect(ctx)` without tearing down a connection other in-flight
+// requests are using (see adapter_pool.go).
 func (s *Server) connectProject(ctx context.Context, projectID string) (Adapter, adapter.Engine, error) {
-	conn, err := s.svc.Store.GetConnectionByProject(ctx, projectID)
-	if err != nil {
-		if errors.Is(err, metadata.ErrNotFound) {
-			return nil, "", errNotFound
-		}
-		return nil, "", err
-	}
-	if s.svc.Secrets == nil {
-		return nil, "", errors.New("server: secrets provider not configured")
-	}
-	secret, err := s.svc.Secrets.DecryptConnection(conn)
+	a, conn, err := s.acquireAdapter(ctx, projectID)
 	if err != nil {
 		return nil, "", err
 	}
-	adapterConn, err := s.svc.AdapterFactory.ConnectForProject(ctx, *conn, secret)
-	if err != nil {
-		return nil, "", err
-	}
-	return adapterConn, adapter.Engine(conn.Engine), nil
+	return a, adapter.Engine(conn.Engine), nil
 }
 
 // ---- Save / connect an existing database (BYODB) ----
@@ -189,6 +177,10 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The pool may hold an adapter dialed against the previous target (the row
+	// id is reused on overwrite), so drop it before anyone can read through it.
+	s.invalidateProjectAdapters(projectID)
+
 	// Re-register any triggers on the newly connected database.
 	if s.svc.TriggerService != nil {
 		_ = s.svc.TriggerService.RegisterProject(r.Context(), *conn, secret)
@@ -239,6 +231,9 @@ func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
 	if s.svc.TriggerService != nil {
 		s.svc.TriggerService.StopProject(projectID)
 	}
+	// Drop the pooled adapter so the next request 404s instead of reading
+	// through a live session to a database that is no longer attached.
+	s.invalidateProjectAdapters(projectID)
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
 

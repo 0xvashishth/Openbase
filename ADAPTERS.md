@@ -153,4 +153,18 @@ Per-engine language (as shipped):
 
 An adapter that genuinely has no raw language simply doesn't implement the interface, and the server answers `400 raw queries are not supported for this engine` rather than faking execution.
 
-**Plumbing note:** the engine package's `Conn` wrapper must forward `ExecRaw` to the underlying adapter. It is the type the server actually holds, so a missing forwarder makes the server's `adapter.RawQuerier` type-assertion fail for *every* engine — which is exactly how the editor once reported "raw SQL is only supported for postgres and mysql" even on Postgres.
+**Plumbing note:** the engine package's `Conn` wrapper must forward `ExecRaw` to the underlying adapter. It is the type the server actually holds, so a missing forwarder makes the server's `adapter.RawQuerier` type-assertion fail for *every* engine — which is exactly how the editor once reported "raw SQL is only supported for postgres and mysql" even on Postgres. The same rule applies to `pooledAdapter` (§7): every wrapper in the chain must forward the optional interfaces, because a type assertion cannot see through an embedded one.
+
+## 7. Adapter pooling — one live adapter per project
+
+The server keeps one connected adapter per project connection in a keyed cache (`internal/pool`, wired in `internal/server/adapter_pool.go`) rather than dialing per request. Before this, every data request paid a full TCP + TLS + auth + `Ping` handshake and then closed the pool on the way out, so `GET /v1/api/*` — the hottest route in the system — did a fresh connection setup and teardown each time, and `GET /projects/{id}/schema` ran its N+1 introspection on a permanently cold connection.
+
+What an adapter implementer needs to know:
+
+- **Adapters are shared across concurrent requests.** Every currently-shipped adapter is safe for this because its underlying client already is (`pgxpool.Pool`, `*sql.DB`, `mongo.Client`, `redis.Client`, `http.Client` are all documented as concurrency-safe). An adapter that holds a single non-shareable session — a bare `net.Conn`, or any client with per-connection server-side state — must not be pooled; say so in review rather than assuming.
+- **`Disconnect` on a pooled adapter is a no-op.** The pool owns the lifecycle. Handlers still write `defer a.Disconnect(ctx)` and that is correct: real disposal happens on idle eviction, invalidation, or server shutdown.
+- **Optional interfaces must be forwarded explicitly** by the wrapper (see the `RawQuerier` forwarder and the assertions next to it). This is the one real hazard the wrapper introduces, and it fails for all engines at once, so `pooled_adapter_test.go` asserts each forwarded capability.
+- **Long-lived subscriptions stay out of the pool.** Realtime and the trigger runtime dial their own adapters on purpose: a Postgres `LISTEN` needs a dedicated session, and its lifetime is the subscription's, not a request's.
+
+Invalidation is by project, on every event that can repoint a project at different data: saving or replacing a connection, and deleting one. `saveConnection` reuses the connection row id when it overwrites credentials, so the pool key also carries a credential *generation* — without it, a rewrite would keep serving an adapter still dialed at the previous database. The memoized primary-key cache (§`resolveRowKey`) is invalidated on the same events, since a new target can have a different schema.
+

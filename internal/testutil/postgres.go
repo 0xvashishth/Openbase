@@ -66,7 +66,14 @@ func StartPostgres(t *testing.T) *PostgresContainer {
 	port := freePort(t)
 
 	remove := func() {
-		_ = exec.Command("docker", "rm", "-f", name).Run()
+		// -v is load-bearing: postgres:16-alpine declares
+		// VOLUME /var/lib/postgresql/data, so every container creates an
+		// anonymous volume. `docker rm -f` without -v orphans it, and nothing
+		// ever reclaims it — a full suite run leaks one ~45 MB volume per
+		// StartPostgres call. That silently filled a 32 GB disk (295 orphans,
+		// 13 GB) until initdb started failing with "No space left on device",
+		// which surfaces here as an unexplained container-readiness timeout.
+		_ = exec.Command("docker", "rm", "-f", "-v", name).Run()
 	}
 	t.Cleanup(remove)
 

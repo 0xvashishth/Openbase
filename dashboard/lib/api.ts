@@ -111,6 +111,8 @@ export const api = {
   // Projects.
   listProjects: (token: string, orgId: string) =>
     request<Project[]>("GET", `/v1/orgs/${orgId}/projects`, undefined, token),
+  getProject: (token: string, projectId: string) =>
+    request<Project>("GET", `/v1/projects/${projectId}`, undefined, token),
   createProject: (token: string, orgId: string, name: string, slug: string) =>
     request<Project>("POST", `/v1/orgs/${orgId}/projects`, { name, slug }, token),
 

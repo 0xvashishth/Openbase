@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import type { CapabilitySet, Connection, Project } from "@/lib/types";
 
@@ -63,15 +63,10 @@ export function ProjectProvider({
     setError(null);
     (async () => {
       try {
-        const projects = await api.listProjects(token, orgId);
+        // Resolve the one project directly. This used to list every project in
+        // the org and scan for an id we already had.
+        const found = await api.getProject(token, projectId);
         if (cancelled) return;
-        const found = projects.find((p) => p.id === projectId) ?? null;
-        if (!found) {
-          setError("Project not found");
-          setProject(null);
-          setLoading(false);
-          return;
-        }
         setProject(found);
         try {
           const conn = await api.getConnection(token, projectId);
@@ -94,7 +89,12 @@ export function ProjectProvider({
           }
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load project");
+        if (cancelled) return;
+        // A 404 is a missing project, not an infrastructure failure; keep the
+        // existing "Project not found" copy the guard renders.
+        const notFound = err instanceof ApiError && err.status === 404;
+        setError(notFound ? "Project not found" : err instanceof Error ? err.message : "Failed to load project");
+        setProject(null);
       } finally {
         if (!cancelled) setLoading(false);
       }

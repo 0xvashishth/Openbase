@@ -120,3 +120,15 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, projects)
 }
+
+// getProject resolves one project by id, checking org membership. Without it
+// the dashboard had to list every project in an org and scan for the one it
+// already had the id of.
+func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
+	p, _, err := s.projectAndOrg(r, r.PathValue("projectID"))
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}

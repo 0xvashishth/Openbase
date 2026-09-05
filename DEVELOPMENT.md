@@ -74,6 +74,28 @@ credentials — provisioned credentials stay encrypted server-side, and BYODB
 strings belong to the user's own provider (SCHEMA.md §2). Behind a reverse
 proxy, set `OPENBASE_PUBLIC_URL` so the snippets it renders are copy-pasteable.
 
+## Adapter pooling
+
+Project database connections are pooled: one live adapter per project
+connection, shared across requests, idle-evicted after 5 minutes
+(`internal/server/adapter_pool.go`, on top of the generic `internal/pool`). The
+practical consequences when working on handlers:
+
+- `connectProject` / `connectProjectForAPIKey` return a **shared** adapter whose
+  `Disconnect` is a no-op. Keep writing `defer a.Disconnect(ctx)` — it stays
+  correct and costs nothing.
+- Any code path that changes where a project points must call
+  `invalidateProjectAdapters(projectID)`. `saveConnection` and
+  `deleteConnection` already do.
+- Optional adapter interfaces (today `adapter.RawQuerier`) must be forwarded by
+  `pooledAdapter` explicitly; a type assertion cannot see through an embedded
+  interface. See ADAPTERS.md §7.
+- Realtime and the trigger runtime deliberately dial their own adapters, because
+  a Postgres `LISTEN` needs its own session for the life of the subscription.
+
+`server.New` therefore returns a `server.Handler` (an `http.Handler` plus
+`Close()`); call `Close()` on shutdown so pooled sessions are released.
+
 ## Tests
 
 All Go tests hit a **real Postgres in Docker** (`internal/testutil` spins one up and

@@ -15,6 +15,7 @@ import (
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/auth"
 	"github.com/openbase/openbase/internal/metadata"
+	"github.com/openbase/openbase/internal/pool"
 	"github.com/openbase/openbase/internal/realtime"
 )
 
@@ -126,12 +127,34 @@ type Server struct {
 	// pkCache memoizes single-column primary-key resolution for id-based
 	// PUT/DELETE (see resolveRowKey). Per-Server so tests never share entries.
 	pkCache *rowKeyCache
+
+	// adapters holds one live adapter per project connection instead of
+	// dialing and tearing down a pool on every request (see adapter_pool.go).
+	adapters *pool.Pool[adapterKey, Adapter]
 }
 
+// Handler is the http.Handler returned by New, extended with the shutdown hook
+// the pooled adapters need. cmd/server defers Close so a restart does not
+// leave database sessions open on the far side.
+type Handler interface {
+	http.Handler
+	Close()
+}
+
+// handler couples the fully-wrapped middleware chain with the Server that owns
+// the pooled resources.
+type handler struct {
+	http.Handler
+	srv *Server
+}
+
+func (h handler) Close() { h.srv.Close() }
+
 // New builds a Server with all routes registered.
-func New(svc *Services) http.Handler {
+func New(svc *Services) Handler {
 	mux := http.NewServeMux()
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
+	s.adapters = s.newAdapterPool()
 
 	mux.HandleFunc("POST /v1/auth/register", s.register)
 	mux.HandleFunc("POST /v1/auth/login", s.login)
@@ -143,6 +166,10 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/orgs/{orgID}", s.requireAuth(http.HandlerFunc(s.getOrg)))
 	mux.Handle("POST /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.createProject)))
 	mux.Handle("GET /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.listProjects)))
+
+	// Single-project resolver: the dashboard previously listed every project in
+	// an org just to render one.
+	mux.Handle("GET /v1/projects/{projectID}", s.requireAuth(http.HandlerFunc(s.getProject)))
 
 	mux.Handle("GET /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.getConnection)))
 	mux.Handle("POST /v1/projects/{projectID}/connections/test", s.requireAuth(http.HandlerFunc(s.testConnection)))
@@ -186,7 +213,7 @@ func New(svc *Services) http.Handler {
 	mux.Handle("GET /v1/realtime", s.requireAPIKey(http.HandlerFunc(s.realtimeWS)))
 
 	cors := &CORS{AllowedOrigins: svc.AllowedOrigins}
-	return s.withRecovery(s.withLogging(cors.Middleware(mux)))
+	return handler{Handler: s.withRecovery(s.withLogging(cors.Middleware(mux))), srv: s}
 }
 
 func (s *Server) withLogging(next http.Handler) http.Handler {

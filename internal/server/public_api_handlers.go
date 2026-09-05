@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/openbase/openbase/internal/adapter"
-	"github.com/openbase/openbase/internal/metadata"
 )
 
 // rowKeyCacheTTL bounds how long a resolved primary key is reused. Schema
@@ -61,6 +59,20 @@ func (c *rowKeyCache) set(projectID, collection, field, dataType string) {
 		field:    field,
 		dataType: dataType,
 		expires:  time.Now().Add(rowKeyCacheTTL),
+	}
+}
+
+// invalidateProject drops every memoized key for a project. A connection
+// change can repoint a project at a database whose schema differs, so the
+// resolved primary keys from the old target must not survive it.
+func (c *rowKeyCache) invalidateProject(projectID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	prefix := projectID + "\x00"
+	for k := range c.entries {
+		if strings.HasPrefix(k, prefix) {
+			delete(c.entries, k)
+		}
 	}
 }
 
@@ -223,22 +235,13 @@ func (s *Server) getFullSchema(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// connectProjectForAPIKey returns the project's pooled adapter for the
+// API-key-authenticated data path. This is the hottest route in the system:
+// before pooling it paid a full TCP + TLS + auth + Ping handshake and a
+// teardown on every single request.
 func (s *Server) connectProjectForAPIKey(ctx context.Context, projectID string) (Adapter, error) {
-	conn, err := s.svc.Store.GetConnectionByProject(ctx, projectID)
-	if err != nil {
-		if errors.Is(err, metadata.ErrNotFound) {
-			return nil, errNotFound
-		}
-		return nil, err
-	}
-	if s.svc.Secrets == nil {
-		return nil, errors.New("server: secrets provider not configured")
-	}
-	secret, err := s.svc.Secrets.DecryptConnection(conn)
-	if err != nil {
-		return nil, err
-	}
-	return s.svc.AdapterFactory.ConnectForProject(ctx, *conn, secret)
+	a, _, err := s.acquireAdapter(ctx, projectID)
+	return a, err
 }
 
 // ---- Auto-generated REST endpoints (scoped by API key) ----
