@@ -79,3 +79,20 @@ func TestTablesExistAfterApply(t *testing.T) {
 		}
 	}
 }
+func TestAPIKeyHashIndexExists(t *testing.T) {
+	pool := setupDB(t)
+	ctx := context.Background()
+	if err := Apply(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	var isUnique bool
+	if err := pool.QueryRow(ctx, `
+		SELECT indisunique FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		WHERE c.relname = 'idx_api_keys_hash'`).Scan(&isUnique); err != nil {
+		t.Fatalf("idx_api_keys_hash missing: %v", err)
+	}
+	if !isUnique {
+		t.Fatal("idx_api_keys_hash must be UNIQUE to close the duplicate-hash hole")
+	}
+}
