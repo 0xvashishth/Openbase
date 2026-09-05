@@ -60,7 +60,7 @@ func (s *Server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 func (s *Server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	keyID := r.PathValue("keyID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}

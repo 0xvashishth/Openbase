@@ -8,6 +8,13 @@ import (
 	"github.com/openbase/openbase/internal/metadata"
 )
 
+// orgView embeds the caller's role so the dashboard can gate UI without
+// a second round-trip. All org-scoped responses include it.
+type orgView struct {
+	*metadata.Organization
+	Role metadata.OrgRole `json:"role"`
+}
+
 type createOrgRequest struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
@@ -36,7 +43,7 @@ func (s *Server) createOrg(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, org)
+	writeJSON(w, http.StatusCreated, orgView{Organization: org, Role: metadata.RoleOwner})
 }
 
 func (s *Server) listOrgs(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +52,26 @@ func (s *Server) listOrgs(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, orgs)
+	userID := userIDFromContext(r.Context())
+	out := make([]orgView, 0, len(orgs))
+	for _, o := range orgs {
+		// We already have the membership from the join in ListOrganizationsForUser,
+		// but the current query doesn't select role. Re-fetch via GetMembership
+		// (cheap PK lookup) to get the role for each org.
+		m, err := s.svc.Store.GetMembership(r.Context(), o.ID, userID)
+		role := metadata.RoleMember
+		if err == nil {
+			role = m.Role
+		}
+		out = append(out, orgView{Organization: &o, Role: role})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	if err := s.authorizeOrg(r, orgID); err != nil {
+	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleMember)
+	if err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -63,7 +84,7 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, org)
+	writeJSON(w, http.StatusOK, orgView{Organization: org, Role: m.Role})
 }
 
 type createProjectRequest struct {
@@ -73,8 +94,14 @@ type createProjectRequest struct {
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	if err := s.authorizeOrg(r, orgID); err != nil {
-		s.writeErr(w, err)
+	// Creating a project requires admin or owner (matrix: admin+)
+	_, err := s.authorizeOrgRole(r, orgID, metadata.RoleAdmin)
+	if err != nil {
+		if err == errForbidden {
+			s.forbiddenf(w, "admin role required to create projects")
+		} else {
+			s.writeErr(w, err)
+		}
 		return
 	}
 

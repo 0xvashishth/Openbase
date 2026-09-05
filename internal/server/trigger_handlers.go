@@ -63,7 +63,7 @@ func (s *Server) listTriggers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createTrigger(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -121,7 +121,7 @@ type updateTriggerRequest struct {
 func (s *Server) updateTrigger(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	triggerID := r.PathValue("triggerID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -164,7 +164,7 @@ func (s *Server) updateTrigger(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteTrigger(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	triggerID := r.PathValue("triggerID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}

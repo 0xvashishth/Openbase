@@ -28,6 +28,26 @@ const (
 	RoleMember OrgRole = "member"
 )
 
+// rank returns a numeric priority so higher roles can be compared with
+// >=. owner > admin > member.
+func (r OrgRole) rank() int {
+	switch r {
+	case RoleOwner:
+		return 3
+	case RoleAdmin:
+		return 2
+	case RoleMember:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// AtLeast reports whether this role meets or exceeds the given minimum.
+func (r OrgRole) AtLeast(min OrgRole) bool {
+	return r.rank() >= min.rank()
+}
+
 // Organization groups projects under a single owner.
 type Organization struct {
 	ID        string    `json:"id"`

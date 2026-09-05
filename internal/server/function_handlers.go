@@ -54,7 +54,7 @@ func (s *Server) listFunctions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createFunction(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -106,7 +106,7 @@ func (s *Server) getFunction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteFunction(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
 	fnID := r.PathValue("fnID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}

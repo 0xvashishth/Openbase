@@ -156,6 +156,18 @@ func (ts *testServer) createProject(t *testing.T, token, orgID, name, slug strin
 	return js["id"].(string)
 }
 
+func (ts *testServer) addMember(t *testing.T, orgID, userID string, role metadata.OrgRole) {
+	t.Helper()
+	err := ts.store.AddMember(t.Context(), &metadata.Membership{
+		OrganizationID: orgID,
+		UserID:         userID,
+		Role:           role,
+	})
+	if err != nil {
+		t.Fatalf("add member %s role=%s: %v", userID, role, err)
+	}
+}
+
 func TestAuthFlow(t *testing.T) {
 	ts := newTestServer(t)
 

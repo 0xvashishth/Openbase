@@ -7,24 +7,23 @@ import (
 	"github.com/openbase/openbase/internal/metadata"
 )
 
-// projectAndOrg loads a project and its owning org id, checking that the
-// authenticated user is a member of that org.
-func (s *Server) projectAndOrg(r *http.Request, projectID string) (*metadata.Project, *metadata.Organization, error) {
+// projectAndOrgRole loads a project and its owning org id, checking that the
+// authenticated user has at least the minimum role in that org.
+func (s *Server) projectAndOrgRole(r *http.Request, projectID string, min metadata.OrgRole) (*metadata.Project, *metadata.Organization, *metadata.Membership, error) {
 	p, err := s.svc.Store.GetProject(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, metadata.ErrNotFound) {
-			return nil, nil, errNotFound
+			return nil, nil, nil, errNotFound
 		}
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	if err := s.authorizeOrg(r, p.OrganizationID); err != nil {
-		return nil, nil, err
-	}
-	org, err := s.svc.Store.GetOrganization(r.Context(), p.OrganizationID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return p, org, nil
+	return s.authorizeProjectOrgRole(r, projectID, p.OrganizationID, min)
+}
+
+// projectAndOrg is the member-minimum wrapper used by read-only handlers.
+func (s *Server) projectAndOrg(r *http.Request, projectID string) (*metadata.Project, *metadata.Organization, error) {
+	p, org, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleMember)
+	return p, org, err
 }
 
 func (s *Server) getConnection(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +64,7 @@ type testConnectionResponse struct {
 
 func (s *Server) testConnection(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}

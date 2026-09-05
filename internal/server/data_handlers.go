@@ -52,7 +52,7 @@ type saveConnectionRequest struct {
 // provisioned replacement, destroys the old instance).
 func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -200,7 +200,7 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request) {
 // (encrypted) config. Idempotent when nothing is connected.
 func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
@@ -514,7 +514,7 @@ func hasStackedStatements(q string) bool {
 // an honest 400 instead of a fake execution.
 func (s *Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+	if _, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin); err != nil {
 		s.writeErr(w, err)
 		return
 	}
