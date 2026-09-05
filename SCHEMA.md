@@ -130,4 +130,43 @@ CREATE INDEX idx_projects_org ON projects(organization_id);
 CREATE INDEX idx_connections_project ON connections(project_id);
 CREATE INDEX idx_triggers_project ON triggers(project_id);
 CREATE INDEX idx_org_members_user ON organization_members(user_id);
+
+-- The owner-count guard runs on every demote/remove; make it an index hit.
+CREATE INDEX idx_org_members_owner
+    ON organization_members(organization_id) WHERE role = 'owner';
 ```
+
+No index is needed on `organization_members(organization_id)` — it is the leading column of the composite primary key.
+
+## 5. Role matrix
+
+`organization_members.role` is ranked `owner > admin > member`. Every mutating endpoint declares a minimum role; the server compares ranks (`OrgRole.AtLeast`) rather than string-matching, so adding a role later does not require revisiting call sites.
+
+| Action | owner | admin | member |
+|---|---|---|---|
+| Read org, projects, members, data | ✅ | ✅ | ✅ |
+| Rename org / change slug | ✅ | ✅ | ❌ |
+| Delete org | ✅ | ❌ | ❌ |
+| Add member | ✅ | ✅ | ❌ |
+| Change member role | ✅ | ✅ (not to/from owner) | ❌ |
+| Remove member | ✅ | ✅ | self only (leave) |
+| Transfer ownership | ✅ | ❌ | ❌ |
+| Create project | ✅ | ✅ | ❌ |
+| Rename project | ✅ | ✅ | ❌ |
+| Delete project | ✅ | ❌ | ❌ |
+| Save / remove DB source | ✅ | ✅ | ❌ |
+| Mint / revoke API key | ✅ | ✅ | ❌ |
+| Raw SQL / DDL | ✅ | ✅ | ❌ |
+| Trigger & function CRUD | ✅ | ✅ | ❌ |
+
+The dashboard mirrors this table in `dashboard/lib/permissions.ts`, whose test is a line-by-line parity check against the rows above. UI gating is a convenience; the server is the enforcement point.
+
+### Two invariants enforced in the store, not the handler
+
+1. **Last-owner guard** — `CountOwners` must stay ≥ 1 across any demote or remove. A violation returns **409**, not 403: the caller has the permission, the org simply cannot be left ownerless.
+2. **Owner grants come only from owners** — an admin calling `PATCH /members/{id}` with `role=owner`, or targeting a row whose current role is already `owner`, gets **403**.
+
+### Delete semantics
+
+- **Delete org** refuses with **409** while any project exists, listing the blockers. Cascading would have to destroy N provisioned containers inside one transaction; a failure at container 3 of 5 leaves the metadata row gone and two containers orphaned. Blocking is the recoverable version.
+- **Delete project** destroys the provisioned container *first* and aborts on failure, because the metadata row holds the only record of that container id. Child rows (`connections`, `api_keys`, `triggers`, `functions`) are removed by `ON DELETE CASCADE`.

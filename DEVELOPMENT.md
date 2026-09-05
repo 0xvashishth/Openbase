@@ -74,6 +74,43 @@ credentials — provisioned credentials stay encrypted server-side, and BYODB
 strings belong to the user's own provider (SCHEMA.md §2). Behind a reverse
 proxy, set `OPENBASE_PUBLIC_URL` so the snippets it renders are copy-pasteable.
 
+## Org, member and project management endpoints
+
+All dashboard-authenticated (JWT). The **min role** column is enforced by
+`authorizeOrgRole` / `projectAndOrgRole`; the full matrix lives in SCHEMA.md §5.
+
+| Method | Path | Min role | Notes |
+|---|---|---|---|
+| `GET` | `/v1/orgs` | — | Each row carries the caller's `role` |
+| `POST` | `/v1/orgs` | — | Creator becomes owner |
+| `GET` | `/v1/orgs/{orgID}` | member | Includes `role`, so the UI needs no `/me` round-trip |
+| `PATCH` | `/v1/orgs/{orgID}` | admin | `{name?, slug?}`; duplicate slug → 409 |
+| `DELETE` | `/v1/orgs/{orgID}` | owner | Body `{slug}` must match; 409 while any project exists |
+| `GET` | `/v1/orgs/{orgID}/members` | member | `[]OrgMember` with email + full_name, ordered by role rank |
+| `POST` | `/v1/orgs/{orgID}/members` | admin | `{email, role}`; 404 unknown account, 409 duplicate, 403 if a non-owner grants owner |
+| `PATCH` | `/v1/orgs/{orgID}/members/{userID}` | admin | `{role}`; last-owner demote → 409; owner transitions owner-only |
+| `DELETE` | `/v1/orgs/{orgID}/members/{userID}` | member (self) / admin (others) | Self = leave; last owner → 409 |
+| `POST` | `/v1/orgs/{orgID}/transfer-ownership` | owner | `{user_id, demote_self?}` in one transaction |
+| `POST` | `/v1/orgs/{orgID}/projects` | admin | |
+| `GET` | `/v1/orgs/{orgID}/projects` | member | |
+| `GET` | `/v1/projects/{projectID}` | member | Single-project resolver |
+| `PATCH` | `/v1/projects/{projectID}` | admin | `{name?, slug?}`; slug unique per org → 409 |
+| `DELETE` | `/v1/projects/{projectID}` | owner | Destroys the provisioned container first, then cascades |
+
+Two conventions worth knowing before adding endpoints here:
+
+- **403 bodies name the required role.** `authorizeOrgRole` wraps `errForbidden`
+  with `"%s role required"`, and `writeErr` preserves that message, so the
+  dashboard can render a real reason. Do not flatten it back to `"forbidden"`.
+- **A blocked invariant is 409, not 403.** The last-owner guard and the
+  "org still has projects" check are state conflicts: the caller *has* the
+  permission. Reserve 403 for genuine permission failures.
+
+Adding a member requires an existing account. `internal/mail` does not exist yet
+(PHASES 9.2), so the API returns 404 for an unknown address rather than
+pretending an invite was sent. Migration `0003` already creates
+`organization_invites` for when the mailer lands.
+
 ## Adapter pooling
 
 Project database connections are pooled: one live adapter per project
@@ -85,8 +122,8 @@ practical consequences when working on handlers:
   `Disconnect` is a no-op. Keep writing `defer a.Disconnect(ctx)` — it stays
   correct and costs nothing.
 - Any code path that changes where a project points must call
-  `invalidateProjectAdapters(projectID)`. `saveConnection` and
-  `deleteConnection` already do.
+  `invalidateProjectAdapters(projectID)`. `saveConnection`, `deleteConnection`
+  and `deleteProject` already do.
 - Optional adapter interfaces (today `adapter.RawQuerier`) must be forwarded by
   `pooledAdapter` explicitly; a type assertion cannot see through an embedded
   interface. See ADAPTERS.md §7.
@@ -124,7 +161,16 @@ go test ./...     # full suite (provisioning tests need the Docker daemon and sk
 make test-short   # -short variant
 ```
 
+RBAC and lifecycle behaviour is covered by `internal/server/rbac_test.go` (the
+matrix as a table), plus `org_settings_test.go`, `members_test.go` and
+`project_settings_test.go`. The cascade test uses a stub provisioner and asserts
+`Destroy` received the **container** id, that all four child tables are emptied,
+and that a previously valid API key then 401s on `/v1/api/*`. A second stub whose
+`Destroy` always fails pins the ordering guarantee: the project must survive.
+
 Dashboard: `cd dashboard && npm test` (vitest) and `npm run build`.
+`dashboard/lib/permissions.test.ts` is a line-by-line parity check against the Go
+role matrix — if you change one, that test tells you to change the other.
 
 ### Provisioned databases from docker compose
 

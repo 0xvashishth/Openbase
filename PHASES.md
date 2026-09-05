@@ -365,12 +365,13 @@ save/delete-connection and on key rotation. Also add `GET /v1/projects/{projectI
 stops fetching every project to resolve one, and index `api_keys.key_hash` (see 8.5) so auth stops
 being a seq scan. Ship with a before/after benchmark in the PR.
 
-**8.4 — Enforce RBAC.**
-`authorizeOrg` (`internal/server/middleware.go:34`) only asserts that a membership row exists; the
-`role` column is never compared anywhere outside its own creation. A `member` can currently delete
-the project's database, mint API keys and run arbitrary DDL. Add `requireRole(min Role)`, document
-the matrix in `SCHEMA.md`, apply it to every mutating route, and write negative tests
-(member→403 on destructive routes, cross-org→404).
+**8.4 — Enforce RBAC.** ✅ *shipped*
+`authorizeOrg` (`internal/server/middleware.go:34`) only asserted that a membership row exists; the
+`role` column was never compared anywhere outside its own creation, so a `member` could delete the
+project's database, mint API keys and run arbitrary DDL. Now: `OrgRole.rank()`/`AtLeast()`,
+`authorizeOrgRole(min)` / `projectAndOrgRole(min)` applied to every mutating route, the matrix
+documented in `SCHEMA.md` §5, and 403 bodies that name the required role. `rbac_test.go` walks the
+matrix; `dashboard/lib/permissions.test.ts` is a parity check so UI gating cannot drift from it.
 
 **8.5 — API keys: real scopes, real hygiene.**
 Scopes are stored, echoed and never consulted (`internal/server/apikey_handlers.go:88`), so a
@@ -378,13 +379,20 @@ Scopes are stored, echoed and never consulted (`internal/server/apikey_handlers.
 `last_used_at`, optional `expires_at`, and a stored display prefix (`ob_abc…`) so the UI can
 identify a key it can never show again. Migration `0002_*.sql`.
 
-**8.6 — Org/project lifecycle endpoints.**
-`Store.AddMember`/`ListMembers` exist with no route; the dashboard ships
-`/orgs/[orgId]/members` and `/orgs/[orgId]/settings` as stubs whose copy claims the feature is
-"available via the API" — it is not. Add `PATCH`/`DELETE /v1/orgs/{id}`,
-`GET/POST/PATCH/DELETE /v1/orgs/{id}/members`, `PATCH`/`DELETE /v1/projects/{id}` (cascade:
-destroy provisioned containers, revoke keys, deregister triggers), then wire both stub pages and
-make the project "Danger zone" real.
+**8.6 — Org/project lifecycle endpoints.** ✅ *shipped*
+`Store.AddMember`/`ListMembers` existed with no route, and the dashboard shipped
+`/orgs/[orgId]/members`, `/orgs/[orgId]/settings` and the project "Danger zone" as stubs whose copy
+claimed the feature was "available via the API" — it was not. Now: `PATCH`/`DELETE /v1/orgs/{id}`,
+full member CRUD, `POST /v1/orgs/{id}/transfer-ownership`, and `PATCH`/`DELETE /v1/projects/{id}`
+with an ordered cascade (destroy the provisioned container first and abort on failure, stop
+triggers, invalidate the pooled adapter, then let `ON DELETE CASCADE` clear connections, keys,
+triggers and functions). All three pages are real, with `OrgSettingsPanel`, `MembersPanel` and
+`ProjectSettingsPanel`. Deleting an org refuses with 409 while projects exist rather than cascading
+across N containers mid-transaction.
+
+Two things deliberately left for later: adding a member requires an existing account (there is no
+mailer until 9.2, so an unknown address returns 404 instead of pretending an invite was sent), and
+`organization_invites` exists in migration `0003` but has no routes yet — that is 9.7.
 
 **8.7 — Abuse controls + operability.**
 Add `GET /healthz` (liveness) and `GET /readyz` (metadata DB + migration state), a Prometheus
@@ -450,13 +458,25 @@ linking. SAML behind a build flag (stretch).
 **9.6 — MFA for operators.** TOTP enrolment + recovery codes + step-up challenge on destructive
 actions.
 
-**9.7 — Org collaboration.** Email invites with accept flow, members list with role editor,
-transfer ownership, leave org, last-owner guard. Replaces the 9.x stub pages wired in 8.6.
+**9.7 — Org collaboration.** *Partially shipped in 8.6:* members list with an inline role editor,
+transfer ownership (with optional self-demotion), leave org, and the last-owner guard are all live,
+and adding an existing account by email works. What remains is the part that needs a mailer:
+email invites with an accept flow. Migration `0003` already ships
+`organization_invites (org_id, email, role, token_hash, invited_by, expires_at, accepted_at)`, so
+this is `POST /v1/orgs/{id}/invites` returning a one-time link plus
+`POST /v1/invites/{token}/accept` — usable out-of-band for self-hosters even before 9.2 lands, with
+mail becoming just another delivery channel for the same token.
 
 **9.8 — Audit log.** `audit_events` (actor, org, project, action, target, IP, metadata, ts) written
 for login, key mint/revoke, connection change, **every raw SQL execution**, DDL, member/role change,
 project delete. `GET /v1/orgs/{id}/audit` + a filterable UI. Nothing today records that a member ran
 `DROP TABLE` through the SQL editor.
+
+*Seam already in place from 8.6:* `server.AuditSink` is an interface on `Services` with a no-op
+default, and every org/project mutation already calls `Record(actor, org, project, action, target,
+metadata)`. Migration `0003` creates the `audit_events` table. This phase is now a writer
+implementation plus the read endpoint and UI — the ~15 call sites exist, which is the part that is
+expensive to retrofit.
 
 **Done when:** a user can sign up, verify their email, reset a forgotten password, enrol TOTP,
 invite a colleague as `admin`, see both sessions listed, revoke one, and read the audit trail of all
