@@ -1,9 +1,10 @@
 import { ProjectOverviewSkeleton } from "@/components/ui/skeletons";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function ProjectLoading() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectOverviewSkeleton />
-    </div>
+    </PageShell>
   );
 }

@@ -25,7 +25,7 @@ export function OrgList() {
 
   if (error) {
     return (
-      <p role="alert" className="text-sm text-destructive">{error}</p>
+      <p role="alert" className="text-caption text-destructive">{error}</p>
     );
   }
   if (!orgs) {
@@ -39,13 +39,13 @@ export function OrgList() {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {orgs.map((org) => (
         <Link key={org.id} href={`/orgs/${org.id}`} className="group min-w-0">
-          <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+          <Card className="transition-colors hover:border-foreground/25">
             <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="truncate font-semibold text-foreground">{org.name}</h3>
+                <h3 className="truncate text-caption font-w510 text-foreground-strong">{org.name}</h3>
                 <Badge variant="secondary">{org.slug}</Badge>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1.5 text-label text-muted-foreground">
                 Created {new Date(org.created_at).toLocaleDateString()}
               </p>
             </CardContent>

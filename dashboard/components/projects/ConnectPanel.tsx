@@ -127,7 +127,7 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle>Connection parameters</CardTitle>
             {engineLabel && <Badge variant="secondary">{engineLabel}</Badge>}
-            <Badge variant={connected ? "success" : "warning"}>
+            <Badge variant={connected ? "success" : "muted"}>
               {connected ? "connected" : "no database"}
             </Badge>
           </div>
@@ -171,16 +171,16 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
               <Button onClick={createKey} loading={creating}>
                 Create API key
               </Button>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-label text-muted-foreground">
                 {activeKeys === 0
                   ? "No active keys yet."
                   : `${activeKeys} active key${activeKeys === 1 ? "" : "s"} — snippets use a placeholder.`}
               </span>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-label text-muted-foreground">
             Manage and revoke keys on the{" "}
-            <Link href={`/orgs/${orgId}/projects/${projectId}/api`} className="underline hover:text-foreground">
+            <Link href={`/orgs/${orgId}/projects/${projectId}/api`} className="text-foreground underline decoration-border decoration-1 underline-offset-2 transition-colors hover:decoration-foreground">
               API Keys
             </Link>{" "}
             tab.
@@ -202,17 +202,17 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
 
       <section>
         <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">Client libraries</h2>
+          <h2 className="text-caption font-w510 text-foreground-strong">Client libraries</h2>
           {tables.length > 0 && (
             <div className="flex items-center gap-2">
-              <Label htmlFor="connect-table" className="text-xs text-muted-foreground">
+              <Label htmlFor="connect-table" className="mb-0 text-label text-muted-foreground">
                 Example table
               </Label>
               <select
                 id="connect-table"
                 value={table}
                 onChange={(e) => setTable(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-8 rounded-md border border-input bg-foreground/[0.02] px-2 text-label text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
               >
                 {tables.map((t) => (
                   <option key={t} value={t}>
@@ -238,14 +238,14 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           ))}
         </Tabs>
         {tables.length === 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Replace <code className="font-mono">{TABLE_PLACEHOLDER}</code> with one of your tables.
+          <p className="mt-2 text-label text-muted-foreground">
+            Replace <code className="rounded-sm bg-foreground/[0.06] px-1 font-mono text-foreground">{TABLE_PLACEHOLDER}</code> with one of your tables.
           </p>
         )}
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Realtime</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Realtime</h2>
         {realtimeAvailable ? (
           <CodeBlock language="javascript" label="Realtime example" code={realtimeSnippet(params)} />
         ) : (
@@ -257,26 +257,26 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Environment</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Environment</h2>
         <CodeBlock language="dotenv" label="env example" code={envSnippet({ apiBaseUrl, apiKey })} />
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-label text-muted-foreground">
           Keep the key server-side. It carries full read/write access to this project&apos;s data,
-          so never ship it in a browser bundle (no <code className="font-mono">NEXT_PUBLIC_</code> prefix).
+          so never ship it in a browser bundle (no <code className="rounded-sm bg-foreground/[0.06] px-1 font-mono text-foreground">NEXT_PUBLIC_</code> prefix).
         </p>
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Direct database access (ORMs)</h2>
-        <div className="max-w-xl rounded-xl border border-border bg-card p-4">
-          <p className="text-sm font-medium text-foreground">{directDb.title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{directDb.body}</p>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Direct database access (ORMs)</h2>
+        <div className="max-w-xl rounded-lg border border-border bg-card p-4">
+          <p className="text-caption font-w510 text-foreground-strong">{directDb.title}</p>
+          <p className="mt-1.5 text-label text-muted-foreground">{directDb.body}</p>
         </div>
       </section>
 
       {info && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold text-foreground">Endpoint reference</h2>
-          <div className="max-w-xl space-y-1.5 rounded-xl border border-border bg-card p-4 text-xs">
+          <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Endpoint reference</h2>
+          <div className="max-w-xl space-y-1.5 rounded-lg border border-border bg-card p-4 text-label">
             {[
               ["List tables", info.endpoints.list_tables],
               ["Read rows", info.endpoints.query_rows],
@@ -292,7 +292,7 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
               </div>
             ))}
             <p className="pt-2 text-muted-foreground">
-              Auth: <code className="font-mono">{info.auth_header}</code>
+              Auth: <code className="rounded-sm bg-foreground/[0.06] px-1 font-mono text-foreground">{info.auth_header}</code>
             </p>
           </div>
         </section>

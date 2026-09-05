@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { QueryEditor } from "@/components/data/QueryEditor";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
+import { PageShell } from "@/components/layout/PageShell";
 
 function EditorBody({ projectId }: { projectId: string }) {
   const { engine } = useProject();
@@ -13,10 +14,10 @@ function EditorBody({ projectId }: { projectId: string }) {
 export default function SqlPage() {
   const params = useParams<{ projectId: string }>();
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard requireConnection toolName="SQL Editor">
         <EditorBody projectId={params.projectId} />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

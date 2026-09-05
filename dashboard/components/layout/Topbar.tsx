@@ -149,15 +149,15 @@ export function Topbar({
   const badgesSettled = !projectLoading;
 
   return (
-    <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-1.5 sm:gap-3 sm:px-4">
+    <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-1.5 sm:gap-3 sm:px-4">
       <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-1">
         <Breadcrumbs items={crumbs} info={info} />
         {showBadges && (
           <div className="flex shrink-0 items-center gap-1.5" aria-label="Connection status">
             {!badgesSettled ? (
               <>
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-badge" />
+                <Skeleton className="h-5 w-24 rounded-badge" />
               </>
             ) : (
               <>
@@ -166,7 +166,7 @@ export function Topbar({
                   (connected ? (
                     <Badge variant="success">connected</Badge>
                   ) : (
-                    <Badge variant="warning">not connected</Badge>
+                    <Badge variant="muted">not connected</Badge>
                   ))}
               </>
             )}
@@ -181,14 +181,14 @@ export function Topbar({
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button aria-label="Account menu" className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <button aria-label="Account menu" className="rounded-badge outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback>{user.email?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="max-w-[220px] truncate font-normal text-muted-foreground">
+              <DropdownMenuLabel className="max-w-[220px] truncate">
                 {user.email}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

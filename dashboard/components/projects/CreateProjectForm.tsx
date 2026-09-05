@@ -38,7 +38,7 @@ export function CreateProjectForm({ orgId, onCreated }: { orgId: string; onCreat
         <Label htmlFor="proj-slug">Slug</Label>
         <Input id="proj-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="my-app" required />
       </div>
-      <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      <p className="rounded-md border border-border bg-card px-3 py-2 text-label text-muted-foreground">
         After creation you&apos;ll pick a database engine (provisioned or
         bring-your-own) on the DB Source tab.
       </p>

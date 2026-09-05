@@ -74,10 +74,20 @@ export function useApiStatus(enabled = true): { health: ApiHealth; latency: numb
   return { health, latency, checks };
 }
 
+/**
+ * Liveness dot fills.
+ *
+ * `degraded` has no amber to reach for — DESIGN.md's palette has no warning
+ * color, and using the acid-lime accent would break the one-chromatic-element
+ * rule. Signal Teal is the spec's "informational" accent, which reads as
+ * "something to look at" without claiming the severity of Coral Red.
+ * (Previously `bg-warning`, which compiled to nothing after the token was
+ * removed — the dot rendered with no fill at all.)
+ */
 const dot: Record<ApiHealth, string> = {
   checking: "bg-muted-foreground",
   operational: "bg-success",
-  degraded: "bg-warning",
+  degraded: "bg-info",
   down: "bg-destructive",
 };
 
@@ -112,12 +122,12 @@ export function ApiStatusBadge({
       role="status"
       aria-label={`API status: ${label[health]}${latency != null ? `, ${latency} milliseconds` : ""}`}
       title={title}
-      className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap text-label text-muted-foreground"
     >
-      <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", dot[health])} />
+      <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot[health])} />
       {label[health]}
       {health === "operational" && latency != null && (
-        <span className="tabular-nums">{latency}ms</span>
+        <span className="font-mono tabular-nums">{latency}ms</span>
       )}
     </span>
   );

@@ -34,7 +34,7 @@ function RouteProgress({ currentPath }: { currentPath: string }) {
   }, [currentPath]);
   if (!visible) return null;
   return (
-    <div role="status" aria-label="Loading new page" className="h-0.5 w-full overflow-hidden bg-muted">
+    <div role="status" aria-label="Loading new page" className="h-0.5 w-full overflow-hidden bg-border">
       <div className="h-full w-1/3 animate-[progress-slide_0.6s_ease-in-out_infinite] bg-primary" />
       <span className="sr-only">Loading new page…</span>
     </div>
@@ -126,7 +126,7 @@ function ProjectChrome({
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
+            "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
             collapsed ? "w-16" : "w-60"
           )}
         >
@@ -139,7 +139,7 @@ function ProjectChrome({
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!collapsed}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
@@ -156,7 +156,7 @@ function ProjectChrome({
               <Menu className="h-4 w-4" /> Menu
             </Button>
           </div>
-          <main className="flex-1 overflow-y-auto bg-muted/30">{children}</main>
+          <main className="flex-1 overflow-y-auto bg-background">{children}</main>
         </div>
       </div>
     </div>
@@ -204,7 +204,7 @@ function ShellChrome({
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            "hidden shrink-0 flex-col border-r border-border bg-background transition-all md:flex",
+            "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
             collapsed ? "w-16" : "w-60"
           )}
         >
@@ -215,7 +215,7 @@ function ShellChrome({
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!collapsed}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
@@ -232,7 +232,7 @@ function ShellChrome({
               <Menu className="h-4 w-4" /> Menu
             </Button>
           </div>
-          <main className="flex-1 overflow-y-auto bg-muted/30">{children}</main>
+          <main className="flex-1 overflow-y-auto bg-background">{children}</main>
         </div>
       </div>
     </div>

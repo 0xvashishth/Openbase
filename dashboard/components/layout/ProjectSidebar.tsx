@@ -60,7 +60,7 @@ export function ProjectSidebar({
       return (
         <div className="flex h-full flex-col items-center gap-2 px-2 py-3" role="status" aria-label="Loading project navigation">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-10 rounded-md" />
+            <Skeleton key={i} className="h-9 w-9 rounded-md" />
           ))}
           <span className="sr-only">Loading project navigation…</span>
         </div>
@@ -106,7 +106,7 @@ export function ProjectSidebar({
                     href={`/orgs/${orgId}`}
                     aria-label="Back to projects"
                     title="Back to projects"
-                    className="mx-auto flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    className="mx-auto flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   >
                     <ArrowLeft className="h-4 w-4" aria-hidden />
                     <span className="sr-only">Back to projects</span>
@@ -118,7 +118,7 @@ export function ProjectSidebar({
           ) : (
             <Link
               href={`/orgs/${orgId}`}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-label font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to projects
             </Link>

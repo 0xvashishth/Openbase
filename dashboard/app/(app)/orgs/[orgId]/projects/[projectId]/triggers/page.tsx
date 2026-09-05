@@ -3,14 +3,15 @@
 import { useParams } from "next/navigation";
 import { TriggersPanel } from "@/components/projects/TriggersPanel";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function TriggersPage() {
   const params = useParams<{ projectId: string }>();
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard requireConnection requireTriggers toolName="Triggers">
         <TriggersPanel projectId={params.projectId} />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

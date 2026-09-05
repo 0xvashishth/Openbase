@@ -23,7 +23,7 @@ export function ProjectList({ orgId }: { orgId: string }) {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load projects"));
   }, [orgId]);
 
-  if (error) return <p role="alert" className="text-sm text-destructive">{error}</p>;
+  if (error) return <p role="alert" className="text-caption text-destructive">{error}</p>;
   if (!projects) {
     return <CardGridSkeleton count={6} label="Loading projects" />;
   }
@@ -35,13 +35,13 @@ export function ProjectList({ orgId }: { orgId: string }) {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((p) => (
         <Link key={p.id} href={`/orgs/${orgId}/projects/${p.id}`} className="group min-w-0">
-          <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+          <Card className="transition-colors hover:border-foreground/25">
             <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="truncate font-semibold text-foreground">{p.name}</h3>
+                <h3 className="truncate text-caption font-w510 text-foreground-strong">{p.name}</h3>
                 <Badge variant="muted">{p.slug}</Badge>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1.5 text-label text-muted-foreground">
                 Created {new Date(p.created_at).toLocaleDateString()}
               </p>
             </CardContent>

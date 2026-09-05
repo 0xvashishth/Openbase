@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/components/AuthProvider";
 import { ThemeProvider } from "@/components/theme-provider";
+// Self-hosted variable fonts. Variable builds are required: DESIGN.md's weight
+// band (300/400/510/590) includes non-standard stops that static files can't
+// hit. Vendored via npm so `next build` needs no network — matters for the
+// self-hosted Docker image.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 
 export const metadata: Metadata = {

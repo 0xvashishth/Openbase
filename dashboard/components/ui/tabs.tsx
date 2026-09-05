@@ -6,13 +6,24 @@ import { cn } from "@/lib/utils";
 
 const Tabs = TabsPrimitive.Root;
 
+/**
+ * Tabs — an underlined rail rather than shadcn's filled pill tray.
+ *
+ * A filled tray at 12px radius fights the 12px card it usually sits inside, and
+ * the spec's nav language is typographic (§ Nav Text Button: "pure typographic
+ * nav with underline on hover"). `min-h-9` rather than `h-9` so a wrapping
+ * `TabsList` (see ConnectPanel) grows instead of overflowing.
+ */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn("inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground", className)}
+    className={cn(
+      "inline-flex min-h-9 items-center justify-start gap-1 border-b border-border text-muted-foreground",
+      className
+    )}
     {...props}
   />
 ));
@@ -25,7 +36,14 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+      "-mb-px inline-flex items-center justify-center whitespace-nowrap border-b-2 border-transparent px-2.5 py-1.5 text-caption font-normal transition-colors",
+      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+      "disabled:pointer-events-none disabled:opacity-50",
+      "hover:text-foreground",
+      // The active tab is the one nav-scale use of the accent (§ Colors:
+      // "active nav indicators"). An indicator, not a fill, so it never reads
+      // as a second primary action.
+      "data-[state=active]:border-primary data-[state=active]:font-w510 data-[state=active]:text-foreground-strong",
       className
     )}
     {...props}
@@ -39,7 +57,7 @@ const TabsContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
-    className={cn("mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", className)}
+    className={cn("mt-4 focus-visible:outline-none", className)}
     {...props}
   />
 ));

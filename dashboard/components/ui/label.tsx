@@ -5,7 +5,13 @@ import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-const labelVariants = cva("text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70");
+/**
+ * Label — 12px/510 sits a step below the 13px control text it names, so the
+ * field value stays the dominant element in a form row.
+ */
+const labelVariants = cva(
+  "text-label font-w510 leading-none text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+);
 
 const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,

@@ -23,11 +23,14 @@ export function ThemeToggle({ className }: { className?: string }) {
       title={isDark ? "Switch to light theme" : "Switch to dark theme"}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={cn(
-        "inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        // DESIGN.md § Ghost / Outline Button: transparent fill, 1px graphite
+        // edge, 6px radius. Sits on the carbon topbar, so a filled background
+        // would read as a hole punched through the chrome.
+        "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
     >
-      {mounted && isDark ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
+      {mounted && isDark ? <Sun className="h-3.5 w-3.5" aria-hidden /> : <Moon className="h-3.5 w-3.5" aria-hidden />}
     </button>
   );
 }

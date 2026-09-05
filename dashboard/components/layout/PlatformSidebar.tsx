@@ -48,7 +48,7 @@ export function NavSection({
   }
   return (
     <div>
-      <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="px-2.5 pb-1 text-micro font-w510 uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <div className="space-y-0.5">{children}</div>
@@ -107,9 +107,9 @@ export function NavLink({
     // Icon rail: icon-only button that stays fully clickable. Hovering shows
     // the full label in a tooltip (side="right") plus native title fallback.
     const railClass = cn(
-      "mx-auto flex h-10 w-10 items-center justify-center rounded-md transition-colors",
+      "mx-auto flex h-9 w-9 items-center justify-center rounded-md transition-colors",
       active
-        ? "bg-accent text-accent-foreground"
+        ? "bg-primary/10 text-primary"
         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
       pending && "pointer-events-none opacity-70"
     );
@@ -123,7 +123,7 @@ export function NavLink({
                 aria-disabled="true"
                 aria-label={tip}
                 title={disabledReason || textLabel}
-                className={cn(railClass, "cursor-not-allowed text-muted-foreground/60")}
+                className={cn(railClass, "cursor-not-allowed text-muted-foreground/50")}
               >
                 {icon && <span aria-hidden>{icon}</span>}
                 <span className="sr-only">{children}</span>
@@ -171,9 +171,9 @@ export function NavLink({
             <span
               aria-disabled="true"
               title={disabledReason}
-              className="flex cursor-not-allowed items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground/60"
+              className="flex cursor-not-allowed items-center gap-2 rounded-md px-2.5 py-1.5 text-caption font-normal text-muted-foreground/50"
             >
-              {icon && <span className="text-xs" aria-hidden>{icon}</span>}
+              {icon && <span aria-hidden>{icon}</span>}
               {children}
             </span>
           </TooltipTrigger>
@@ -192,14 +192,14 @@ export function NavLink({
         if (href !== pathname) setPending(true);
       }}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+        "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-caption transition-colors",
         active
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          ? "border-primary bg-primary/10 font-w510 text-primary"
+          : "font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground",
         pending && "pointer-events-none opacity-70"
       )}
     >
-      {icon && <span className="text-xs" aria-hidden>{icon}</span>}
+      {icon && <span aria-hidden>{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />}
     </Link>

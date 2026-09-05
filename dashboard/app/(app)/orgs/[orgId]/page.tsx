@@ -9,6 +9,7 @@ import { ProjectList } from "@/components/projects/ProjectList";
 import { CreateProjectForm } from "@/components/projects/CreateProjectForm";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function OrgDetailPage() {
   const params = useParams<{ orgId: string }>();
@@ -26,12 +27,12 @@ export default function OrgDetailPage() {
   }, [orgId]);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <PageShell>
       {error && (
-        <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>
+        <p role="alert" className="mb-4 text-caption text-destructive">{error}</p>
       )}
       <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Projects</p>
+          <p className="text-caption text-muted-foreground">Projects</p>
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden /> New project
           </Button>
@@ -50,6 +51,6 @@ export default function OrgDetailPage() {
         </Dialog>
 
         <ProjectList orgId={orgId} />
-    </div>
+    </PageShell>
   );
 }

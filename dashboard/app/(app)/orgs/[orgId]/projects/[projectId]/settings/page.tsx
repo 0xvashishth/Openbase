@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/ui/feedback";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
+import { PageShell } from "@/components/layout/PageShell";
 
 function SettingsBody() {
   const { project, engine, hasConnection } = useProject();
@@ -45,7 +46,7 @@ function SettingsBody() {
           <CardDescription>Removing the connection destroys provisioned databases.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Use the DB Source tab to remove or replace the database. Project deletion via API.
           </p>
         </CardContent>
@@ -57,10 +58,10 @@ function SettingsBody() {
 export default function SettingsPage() {
   useParams<{ orgId: string; projectId: string }>();
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard>
         <SettingsBody />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

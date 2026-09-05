@@ -2,62 +2,146 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn-inspired monochromatic tokens. Light = neutral white/zinc, Dark = zinc-950.
-   Accent color is intentionally monochrome: primary = foreground-inverted. */
+/* ---------------------------------------------------------------------------
+   Openbase design system — see DESIGN.md ("Linear — midnight precision
+   instrument").
+
+   Two layers of tokens:
+
+   1. RAW PALETTE (`--color-*`) — the literal DESIGN.md palette. Theme
+      independent, defined once, never redefined per theme.
+   2. SEMANTIC TOKENS (`--background`, `--card`, …) — role-based aliases that
+      point at the raw palette. These are what components consume, so a theme
+      swap only re-points aliases and no component has to change.
+
+   Values are stored as SPACE-SEPARATED RGB CHANNELS, not hex. Tailwind v3 only
+   honours the `/opacity` modifier (`bg-card/40`, `border-foreground/25`) when a
+   color resolves through `rgb(var(--token) / <alpha-value>)`. A plain hex in a
+   custom property silently drops the modifier. Channels are a lossless
+   representation of the spec's hex values.
+   --------------------------------------------------------------------------- */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
+    /* --- Raw palette (DESIGN.md § Tokens — Colors) ------------------------ */
+    --color-void: 8 9 10; /* #08090a — page canvas */
+    --color-carbon: 15 16 17; /* #0f1011 — card surfaces, nav bars */
+    --color-obsidian: 22 23 24; /* #161718 — elevated surfaces */
+    --color-graphite: 35 37 42; /* #23252a — hairline borders, ghost fills */
+    --color-smoke: 56 59 63; /* #383b3f — section separators */
+    --color-ash: 98 102 109; /* #62666d — inactive icons, disabled text */
+    --color-fog: 138 143 152; /* #8a8f98 — tertiary text, placeholders */
+    --color-mist: 208 214 224; /* #d0d6e0 — body text on dark surfaces */
+    --color-bone: 229 229 230; /* #e5e5e6 — near-white surface fills */
+    --color-paper: 255 255 255; /* #ffffff — primary headings, max contrast */
+    --color-acid-lime: 228 242 34; /* #e4f222 — THE accent. One per view. */
+    --color-pulse-green: 39 166 68; /* #27a644 */
+    --color-coral-red: 235 87 87; /* #eb5757 */
+    --color-signal-teal: 2 184 204; /* #02b8cc */
+    --color-iris-violet: 99 102 241; /* #6366f1 */
+    --color-lavender: 139 92 246; /* #8b5cf6 */
+
+    /* --- Typography ------------------------------------------------------- */
+    --font-inter-variable: "Inter Variable", ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /* Berkeley Mono is commercial; DESIGN.md names JetBrains Mono as the
+       sanctioned substitute. */
+    --font-berkeley-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+      Monaco, Consolas, monospace;
+
+    /* --- Layout (DESIGN.md § Layout) -------------------------------------- */
+    --page-max-width: 1200px;
+    --card-padding: 24px;
+    --element-gap: 8px;
+  }
+
+  /* -------------------------------------------------------------------------
+     LIGHT THEME — derived, not specified.
+
+     DESIGN.md is dark-only ("Theme: dark"). This palette mirrors the dark
+     surface ladder rather than inverting it literally, and keeps the accent
+     tokens identical so the acid-lime CTA reads the same in both themes.
+
+     Two deliberate departures, both for WCAG AA on white:
+       - Coral Red #eb5757 scores 3.3:1 on white (fails AA for text), so light
+         mode uses #d92d2d → 4.8:1.
+       - Pulse Green #27a644 scores 3.1:1 on white, so light mode uses
+         #1e8436 → 4.8:1.
+     ------------------------------------------------------------------------- */
+  :root {
+    --background: var(--color-paper);
+    --foreground: 60 65 73; /* #3c4149 — 10.3:1 on white */
+    --foreground-strong: var(--color-void);
+
+    --card: 251 251 252; /* #fbfbfc */
+    --card-foreground: 60 65 73;
+    --popover: var(--color-paper);
+    --popover-foreground: 60 65 73;
+
+    /* The single chromatic action. Acid lime only scores 1.2:1 against white,
+       so on light surfaces the primary button carries a darker lime inset ring
+       for edge definition (applied in the Button variant, not here). */
+    --primary: var(--color-acid-lime);
+    --primary-foreground: var(--color-void);
+
+    --secondary: 244 245 247; /* #f4f5f7 */
+    --secondary-foreground: 60 65 73;
+    --muted: 249 249 250; /* #f9f9fa */
+    --muted-foreground: var(--color-ash); /* #62666d — 5.8:1 on white */
+    --accent: 244 245 247;
+    --accent-foreground: var(--color-void);
+
+    --destructive: 217 45 45; /* #d92d2d */
+    --destructive-foreground: var(--color-paper);
+    --success: 30 132 54; /* #1e8436 */
+    --success-foreground: var(--color-paper);
+    --info: 2 145 161; /* #0291a1 */
+
+    --border: 229 230 232; /* #e5e6e8 */
+    --border-strong: 214 216 219; /* #d6d8db */
+    --input: 229 230 232;
+    --ring: var(--color-void);
+
     color-scheme: light;
   }
 
+  /* -------------------------------------------------------------------------
+     DARK THEME — the canonical DESIGN.md system.
+     Surface ladder: void → carbon → obsidian → graphite (§ Surfaces).
+     ------------------------------------------------------------------------- */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 50.6%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 69% 42%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 240 5.9% 10%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: var(--color-void); /* L0 canvas */
+    /* Body copy sits in the mist/fog/ash grey ramp; #ffffff is reserved for
+       headings, which opt in via `text-foreground-strong`. */
+    --foreground: var(--color-mist); /* 13.6:1 on void */
+    --foreground-strong: var(--color-paper);
+
+    --card: var(--color-carbon); /* L1 */
+    --card-foreground: var(--color-mist);
+    --popover: var(--color-obsidian); /* L2 */
+    --popover-foreground: var(--color-mist);
+
+    --primary: var(--color-acid-lime);
+    --primary-foreground: var(--color-void); /* 16.3:1 on lime */
+
+    --secondary: var(--color-graphite); /* L3 interactive tint */
+    --secondary-foreground: var(--color-mist);
+    --muted: var(--color-carbon);
+    --muted-foreground: var(--color-fog); /* 6.1:1 on void */
+    --accent: var(--color-graphite);
+    --accent-foreground: var(--color-paper);
+
+    --destructive: var(--color-coral-red);
+    --destructive-foreground: var(--color-void);
+    --success: var(--color-pulse-green);
+    --success-foreground: var(--color-void);
+    --info: var(--color-signal-teal);
+
+    --border: var(--color-graphite); /* hairline */
+    --border-strong: var(--color-smoke); /* section separators */
+    --input: var(--color-graphite);
+    --ring: var(--color-mist); /* focus brightens the edge (§ Text Input) */
+
     color-scheme: dark;
   }
 }
@@ -67,15 +151,32 @@
     @apply border-border;
     box-sizing: border-box;
   }
+
   html,
   body {
     height: 100%;
     margin: 0;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-      Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    font-family: var(--font-inter-variable);
+    /* DESIGN.md § Do's: these alternate glyphs define the typographic
+       identity — cv01 (alt 1), ss03 (alt curved styles), zero (slashed 0,
+       which also earns its keep in a database dashboard). */
+    font-feature-settings: "cv01" 1, "ss03" 1, "zero" 1;
+    letter-spacing: -0.011em;
+  }
+
+  /* Berkeley Mono / JetBrains Mono is reserved for IDs, keyboard shortcuts and
+     technical metadata — never headings or prose (DESIGN.md § Don't). */
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-berkeley-mono);
+    font-feature-settings: "zero" 1;
+    letter-spacing: -0.013em;
   }
 }
 

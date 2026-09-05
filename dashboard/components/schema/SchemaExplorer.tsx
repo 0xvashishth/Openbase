@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
 import {
   ReactFlow,
   Background,
@@ -32,25 +33,25 @@ function TableNode({ data }: { data: Record<string, any> }) {
   const hidden = columns.length - shown.length;
 
   return (
-    <div className="min-w-[190px] max-w-[270px] overflow-hidden rounded-lg border-2 border-border bg-card text-xs shadow-sm">
-      <div className="border-b border-border bg-muted px-2.5 py-1.5 font-semibold text-foreground">
+    <div className="min-w-[190px] max-w-[270px] overflow-hidden rounded-lg border border-border bg-card text-label">
+      <div className="border-b border-border bg-secondary px-2.5 py-1.5 font-w510 text-foreground-strong">
         {(schema?.collection as string) ?? (schema as unknown as { name?: string })?.name ?? "unknown"}
       </div>
       <div className="py-1">
         {shown.map((col) => (
           <div key={col.name} className="flex items-center gap-1.5 px-2.5 py-0.5 text-muted-foreground">
-            <span className="w-5 text-[10px] font-semibold text-muted-foreground/70">
+            <span className="w-5 font-mono text-micro text-muted-foreground/70">
               {col.is_primary ? "PK" : col.is_unique ? "UQ" : ""}
             </span>
-            <span className="truncate font-mono text-[11px] text-foreground">{col.name}</span>
-            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{col.data_type}</span>
+            <span className="truncate font-mono text-micro text-foreground">{col.name}</span>
+            <span className="ml-auto shrink-0 font-mono text-micro text-muted-foreground/70">{col.data_type}</span>
           </div>
         ))}
         {columns.length === 0 && (
-          <p className="px-2.5 py-1 text-[11px] text-muted-foreground">No columns reported.</p>
+          <p className="px-2.5 py-1 text-micro text-muted-foreground">No columns reported.</p>
         )}
         {hidden > 0 && (
-          <p className="px-2.5 py-0.5 text-[10px] text-muted-foreground">+{hidden} more…</p>
+          <p className="px-2.5 py-0.5 text-micro text-muted-foreground">+{hidden} more…</p>
         )}
       </div>
     </div>
@@ -79,6 +80,14 @@ export function SchemaExplorer({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const supportsFK = schema?.capabilities?.supports_foreign_keys ?? false;
+
+  // ReactFlow's own chrome (controls, minimap, edge defaults) needs the theme
+  // explicitly. `colorMode="system"` followed prefers-color-scheme, which is
+  // wrong here: the app defaults to dark regardless of the OS setting.
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = !mounted || resolvedTheme !== "light";
 
   useEffect(() => {
     const token = authToken();
@@ -138,7 +147,7 @@ export function SchemaExplorer({
 
   if (error) {
     return (
-      <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+      <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-caption text-destructive">
         {error}
       </div>
     );
@@ -159,7 +168,7 @@ export function SchemaExplorer({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <h3 className="flex items-center gap-2 text-caption font-w510 text-foreground-strong">
           Schema Explorer
           <Badge variant="secondary">{total} tables</Badge>
           {hasRelationships && <Badge variant="muted">{relationships.length} relationships</Badge>}
@@ -175,12 +184,12 @@ export function SchemaExplorer({
       </div>
 
       {!supportsFK && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-label text-muted-foreground">
           This engine has no foreign-key support — document/limited model, tables render without relationship lines.
         </p>
       )}
       {!hasRelationships && supportsFK && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-label text-muted-foreground">
           No foreign key relationships detected. Relationship lines appear when tables have FK constraints.
         </p>
       )}
@@ -188,7 +197,7 @@ export function SchemaExplorer({
         <EmptyState title="No tables match" hint={`Nothing matches "${filter.trim()}".`} />
       )}
 
-      <div className="h-[380px] overflow-hidden rounded-lg border border-border bg-background sm:h-[500px]">
+      <div className="h-[380px] overflow-hidden rounded-lg border border-border bg-card sm:h-[500px]">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -196,7 +205,7 @@ export function SchemaExplorer({
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
           fitView
-          colorMode="system"
+          colorMode={isDark ? "dark" : "light"}
           proOptions={{ hideAttribution: true }}
         >
           <Background />

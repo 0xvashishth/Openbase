@@ -51,7 +51,7 @@ export function CreateOrgForm({ onCreated }: { onCreated?: () => void }) {
           placeholder="acme"
           required
         />
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-label text-muted-foreground">
           Unique, URL-safe identifier used in the dashboard.
         </p>
       </div>

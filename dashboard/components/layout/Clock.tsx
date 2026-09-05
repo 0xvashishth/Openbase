@@ -32,7 +32,7 @@ export function Clock() {
       role="timer"
       aria-label={`Current time ${formatNow(now)}`}
       title={now.toISOString()}
-      className="inline-flex items-center gap-1.5 tabular-nums text-muted-foreground"
+      className="inline-flex items-center gap-1.5 font-mono tabular-nums text-muted-foreground"
     >
       {formatNow(now)}
     </span>

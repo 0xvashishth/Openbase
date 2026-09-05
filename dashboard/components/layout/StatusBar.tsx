@@ -35,24 +35,24 @@ export function StatusBar({
   const { orgs } = useOrgList(!!orgId);
   const showOrgSwitcher = !!orgId && !!orgs && orgs.length > 1;
   return (
-    <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 text-[11px] sm:px-4">
+    <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-3 text-label sm:px-4">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Link
           href="/orgs"
           aria-label="Openbase home"
-          className="flex shrink-0 items-center gap-1.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex shrink-0 items-center gap-1.5 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           <span
             aria-hidden
-            className="flex h-5 w-5 items-center justify-center rounded bg-primary text-[10px] font-bold text-primary-foreground"
+            className="flex h-4 w-4 items-center justify-center rounded-sm bg-foreground-strong text-micro font-w510 text-background"
           >
             O
           </span>
-          <span className="font-semibold text-foreground">Openbase</span>
+          <span className="font-w510 text-foreground-strong">Openbase</span>
         </Link>
         {orgLoading ? (
           <span role="status" aria-label="Loading organization">
-            <Skeleton className="h-4 w-20 rounded-full" />
+            <Skeleton className="h-4 w-20 rounded-badge" />
           </span>
         ) : showOrgSwitcher ? (
           <DropdownMenu>
@@ -60,7 +60,7 @@ export function StatusBar({
               <button
                 type="button"
                 aria-label="Switch organization"
-                className="flex max-w-40 items-center gap-1 rounded-full border border-border bg-secondary px-1.5 py-px text-[11px] font-medium text-secondary-foreground outline-none hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex max-w-40 items-center gap-1 rounded-badge border border-border bg-transparent px-1.5 py-px text-label text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <span className="truncate">{orgName ?? "Organization"}</span>
                 <ChevronDown className="h-3 w-3 shrink-0" aria-hidden />
@@ -86,7 +86,7 @@ export function StatusBar({
           </DropdownMenu>
         ) : (
           orgName && (
-            <Badge variant="secondary" className="px-1.5 py-px text-[11px]">
+            <Badge variant="secondary" className="px-1.5 py-px">
               {orgName}
             </Badge>
           )

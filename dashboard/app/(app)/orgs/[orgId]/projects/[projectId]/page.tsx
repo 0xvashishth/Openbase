@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/feedback";
 import { ProjectOverviewSkeleton } from "@/components/ui/skeletons";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
+import { PageShell } from "@/components/layout/PageShell";
 
 function OverviewBody() {
   const { orgId, projectId, project, engine, hasConnection, loading, error } = useProject();
@@ -34,7 +35,7 @@ function OverviewBody() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -72,14 +73,14 @@ function OverviewBody() {
       <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {tools.map((t) => (
           <Link key={t.title} href={t.href} aria-disabled={t.locked || undefined} className="block h-full min-w-0">
-            <Card className="flex h-full flex-col transition-colors hover:border-foreground/25 hover:shadow-sm">
+            <Card className="flex h-full flex-col transition-colors hover:border-foreground/25">
               <CardContent className="flex flex-1 flex-col justify-center p-4 pt-4 sm:p-4 sm:pt-4">
                 <div className="flex items-center gap-2">
                   <t.icon className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  <p className="text-sm font-semibold text-foreground">{t.title}</p>
+                  <p className="text-caption font-w510 text-foreground-strong">{t.title}</p>
                   {t.locked && <Badge variant="muted">locked</Badge>}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{t.desc}</p>
+                <p className="mt-1.5 text-label text-muted-foreground">{t.desc}</p>
               </CardContent>
             </Card>
           </Link>
@@ -91,10 +92,10 @@ function OverviewBody() {
 
 export default function ProjectOverviewPage() {
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard>
         <OverviewBody />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

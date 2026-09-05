@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { SchemaExplorer } from "@/components/schema/SchemaExplorer";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
+import { PageShell } from "@/components/layout/PageShell";
 
 function SchemaBody({ projectId }: { projectId: string }) {
   const { engine } = useProject();
@@ -13,10 +14,10 @@ function SchemaBody({ projectId }: { projectId: string }) {
 export default function SchemaPage() {
   const params = useParams<{ orgId: string; projectId: string }>();
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard requireConnection toolName="Schema">
         <SchemaBody projectId={params.projectId} />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

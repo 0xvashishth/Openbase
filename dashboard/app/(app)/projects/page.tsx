@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/feedback";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
 import type { Organization, Project } from "@/lib/types";
+import { PageShell } from "@/components/layout/PageShell";
 
 interface OrgWithProjects {
   org: Organization;
@@ -41,9 +42,9 @@ export default function ProjectsPage() {
   const total = allProjects.length;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <PageShell>
         {error && (
-          <p role="alert" className="text-sm text-destructive">{error}</p>
+          <p role="alert" className="text-caption text-destructive">{error}</p>
         )}
         {!data && !error && <CardGridSkeleton count={6} label="Loading projects" />}
 
@@ -53,19 +54,19 @@ export default function ProjectsPage() {
 
         {data?.map(({ org, projects }) => (
           <section key={org.id} className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <h2 className="mb-2 text-micro font-w510 uppercase tracking-wide text-muted-foreground">
               {org.name}
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {projects.length === 0 && (
-                <p className="text-sm text-muted-foreground">No projects in this org yet.</p>
+                <p className="text-caption text-muted-foreground">No projects in this org yet.</p>
               )}
               {projects.map((p) => (
                 <Link key={p.id} href={`/orgs/${org.id}/projects/${p.id}`} className="group min-w-0">
-                  <Card className="transition-colors hover:border-foreground/25 hover:shadow-sm">
+                  <Card className="transition-colors hover:border-foreground/25">
                     <CardContent className="p-4 pt-4 sm:p-4 sm:pt-4">
-                      <h3 className="truncate font-semibold text-foreground">{p.name}</h3>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{p.slug}</p>
+                      <h3 className="truncate text-caption font-w510 text-foreground-strong">{p.name}</h3>
+                      <p className="mt-1.5 truncate font-mono text-label text-muted-foreground">{p.slug}</p>
                     </CardContent>
                   </Card>
                 </Link>
@@ -73,6 +74,6 @@ export default function ProjectsPage() {
             </div>
           </section>
         ))}
-    </div>
+    </PageShell>
   );
 }

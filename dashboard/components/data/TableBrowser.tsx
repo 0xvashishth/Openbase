@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableBrowserSkeleton } from "@/components/ui/skeletons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { normalizeNames, normalizeResultSet, normalizeSchemaInfo } from "@/lib/schema";
 import type { SchemaInfo, ResultSet } from "@/lib/types";
 
@@ -136,7 +137,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
   if (error && !active) {
     return (
       <div className="space-y-3">
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-caption text-destructive">
           {error}
         </div>
         <Button variant="outline" size="sm" onClick={loadCollections}>
@@ -169,7 +170,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
         <div className="px-2 pb-2">
           <Input aria-label="Filter tables" placeholder="Filter tables…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="px-2 pb-1 text-micro font-w510 uppercase tracking-wide text-muted-foreground">
           Tables ({visibleCollections.length})
         </p>
         <ul className="max-h-[480px] space-y-0.5 overflow-y-auto">
@@ -178,9 +179,12 @@ export function TableBrowser({ projectId }: { projectId: string }) {
               <button
                 onClick={() => void selectCollection(name)}
                 aria-current={active === name ? "true" : undefined}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  active === name ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-muted"
-                }`}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md border-l-2 border-transparent px-2 py-1.5 text-left text-caption transition-colors",
+                  active === name
+                    ? "border-primary bg-primary/10 font-w510 text-foreground-strong"
+                    : "font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
               >
                 <span aria-hidden>▤</span>
                 <span className="truncate">{name}</span>
@@ -188,14 +192,14 @@ export function TableBrowser({ projectId }: { projectId: string }) {
             </li>
           ))}
           {visibleCollections.length === 0 && (
-            <li className="px-2 py-4 text-xs text-muted-foreground">No tables match.</li>
+            <li className="px-2 py-4 text-label text-muted-foreground">No tables match.</li>
           )}
         </ul>
       </aside>
 
       <section className="overflow-hidden rounded-lg border border-border bg-card" aria-busy={loading || undefined}>
         {!active ? (
-          <div className="p-6 text-sm text-muted-foreground">Select a table to view its rows.</div>
+          <div className="p-6 text-caption text-muted-foreground">Select a table to view its rows.</div>
         ) : loading && rows.length === 0 && !schema ? (
           <div role="status" aria-label="Loading rows" className="space-y-2 p-4">
             <div className="flex items-center gap-2">
@@ -210,18 +214,18 @@ export function TableBrowser({ projectId }: { projectId: string }) {
         ) : (
           <div>
             <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-              <span className="text-sm font-semibold text-foreground">{schema?.collection ?? active}</span>
+              <span className="text-caption font-w510 text-foreground-strong">{schema?.collection ?? active}</span>
               <Badge variant="secondary">{rows.length} rows</Badge>
-              <span className="text-xs text-muted-foreground">page {page + 1} · {PAGE_SIZE}/page</span>
+              <span className="font-mono text-label text-muted-foreground">page {page + 1} · {PAGE_SIZE}/page</span>
               {loading && (
-                <span role="status" aria-label="Refreshing rows" className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span role="status" aria-label="Refreshing rows" className="ml-auto flex items-center gap-1.5 text-label text-muted-foreground">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" aria-hidden />
                   Refreshing…
                 </span>
               )}
             </div>
             {error && (
-              <div role="alert" className="mx-4 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <div role="alert" className="mx-4 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-caption text-destructive">
                 {error}
               </div>
             )}
@@ -244,7 +248,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
                   aria-label="Operator"
                   value={filterOp}
                   onChange={(e) => setFilterOp(e.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  className="h-8 rounded-md border border-input bg-foreground/[0.02] px-2 text-caption text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
                 >
                   {OPERATORS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -274,7 +278,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
               )}
             </form>
             {rows.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">
+              <div className="p-6 text-caption text-muted-foreground">
                 {schema ? `${schema.collection} is empty for this filter/page.` : "No data."}
               </div>
             ) : (
@@ -302,7 +306,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
                       {rows.map((row, i) => (
                         <TableRow key={i}>
                           {columns.map((c) => (
-                            <TableCell key={c} className="max-w-[320px] truncate font-mono text-xs">
+                            <TableCell key={c} className="max-w-[320px] truncate font-mono text-label">
                               {cellText(row[c])}
                             </TableCell>
                           ))}
@@ -315,7 +319,7 @@ export function TableBrowser({ projectId }: { projectId: string }) {
                   <Button variant="outline" size="sm" disabled={page === 0 || loading} onClick={() => changePage(-1)}>
                     <ChevronLeft className="h-3.5 w-3.5" /> Prev
                   </Button>
-                  <span className="text-xs text-muted-foreground">Page {page + 1}</span>
+                  <span className="font-mono text-label text-muted-foreground">Page {page + 1}</span>
                   <Button variant="outline" size="sm" disabled={rows.length < PAGE_SIZE || loading} onClick={() => changePage(1)}>
                     Next <ChevronRight className="h-3.5 w-3.5" />
                   </Button>

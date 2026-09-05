@@ -196,11 +196,11 @@ export function GlobalSearch() {
         type="button"
         aria-label="Search (Ctrl+K)"
         onClick={() => setOpen(true)}
-        className="hidden h-9 w-full max-w-md items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:flex"
+        className="hidden h-8 w-full max-w-md items-center gap-2 rounded-md border border-input bg-foreground/[0.02] px-2.5 text-caption text-muted-foreground transition-colors hover:border-ring hover:text-foreground focus-visible:border-ring focus-visible:outline-none sm:flex"
       >
         <Search className="h-4 w-4 shrink-0" aria-hidden />
         <span className="flex-1 truncate text-left">Search organizations, projects, tables…</span>
-        <kbd className="hidden shrink-0 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] lg:inline-block">
+        <kbd className="hidden shrink-0 rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-micro lg:inline-block">
           ⌘K
         </kbd>
       </button>
@@ -208,7 +208,7 @@ export function GlobalSearch() {
         type="button"
         aria-label="Search (Ctrl+K)"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:hidden"
       >
         <Search className="h-4 w-4" aria-hidden />
       </button>
@@ -240,19 +240,19 @@ export function GlobalSearch() {
                   go(flat[active].href);
                 }
               }}
-              className="h-12 border-0 bg-transparent shadow-none focus-visible:ring-0"
+              className="h-12 border-0 bg-transparent text-body-sm focus-visible:border-0 focus-visible:ring-0"
             />
             {loading && <Spinner className="h-4 w-4 shrink-0" />}
           </div>
           <div ref={listRef} id="global-search-results" role="listbox" className="max-h-[50dvh] overflow-y-auto p-2">
             {flat.length === 0 && !loading && (
-              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+              <p className="px-3 py-8 text-center text-caption text-muted-foreground">
                 {query.trim() ? `No results for "${query.trim()}".` : "Nothing to search yet — create an organization first."}
               </p>
             )}
             {results.map((g) => (
               <div key={g.group} className="mb-1">
-                <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <p className="px-2.5 pb-1 pt-2 text-micro font-w510 uppercase tracking-wide text-muted-foreground">
                   {g.group}
                 </p>
                 {g.items.map((item) => {
@@ -267,16 +267,16 @@ export function GlobalSearch() {
                       onMouseEnter={() => setActive(idx)}
                       onClick={() => go(item.href)}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-caption transition-colors",
                         idx === active ? "bg-accent text-accent-foreground" : "text-muted-foreground"
                       )}
                     >
                       <span className="shrink-0" aria-hidden>{item.icon}</span>
-                      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate font-w510 text-foreground">{item.label}</span>
                       {item.hint && (
                         <>
                           {" "}
-                          <span className="shrink-0 truncate text-xs text-muted-foreground">{item.hint}</span>
+                          <span className="shrink-0 truncate font-mono text-micro text-muted-foreground">{item.hint}</span>
                         </>
                       )}
                     </button>
@@ -285,10 +285,10 @@ export function GlobalSearch() {
               </div>
             ))}
           </div>
-          <div className="hidden items-center gap-3 border-t border-border px-4 py-2 text-[11px] text-muted-foreground sm:flex">
-            <span><kbd className="rounded border border-border bg-muted px-1 font-mono">↑↓</kbd> navigate</span>
-            <span><kbd className="rounded border border-border bg-muted px-1 font-mono">↵</kbd> open</span>
-            <span><kbd className="rounded border border-border bg-muted px-1 font-mono">esc</kbd> close</span>
+          <div className="hidden items-center gap-3 border-t border-border px-4 py-2 text-label text-muted-foreground sm:flex">
+            <span><kbd className="rounded-sm border border-border bg-secondary px-1 font-mono text-micro">↑↓</kbd> navigate</span>
+            <span><kbd className="rounded-sm border border-border bg-secondary px-1 font-mono text-micro">↵</kbd> open</span>
+            <span><kbd className="rounded-sm border border-border bg-secondary px-1 font-mono text-micro">esc</kbd> close</span>
           </div>
         </DialogContent>
       </Dialog>

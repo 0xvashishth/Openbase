@@ -82,7 +82,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Create API Key</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Create API Key</h2>
         <form onSubmit={create} className="flex max-w-xl items-end gap-3">
           <div className="flex-1">
             <Label htmlFor="key-name">Name</Label>
@@ -98,11 +98,11 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
           </Button>
         </form>
         {newKey && (
-          <div className="mt-3 max-w-xl rounded-md border border-warning/30 bg-warning/10 p-3">
-            <p className="text-xs font-medium text-warning">
+          <div className="mt-3 max-w-xl rounded-md border border-destructive/30 bg-destructive/10 p-3">
+            <p className="text-label font-w510 text-destructive">
               Copy this key now — it won't be shown again:
             </p>
-            <code className="mt-1 block break-all rounded bg-warning/15 p-2 text-xs text-warning">
+            <code className="mt-1 block break-all rounded-md bg-destructive/15 p-2 text-label text-destructive">
               {newKey}
             </code>
           </div>
@@ -112,7 +112,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Existing Keys</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Existing Keys</h2>
         {keys.length === 0 ? (
           <EmptyState
             title="No API keys"
@@ -126,8 +126,8 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
               >
                 <div className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-foreground">{k.name}</span>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="block truncate text-caption font-w510 text-foreground-strong">{k.name}</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-label text-muted-foreground">
                     <span>created {new Date(k.created_at).toLocaleDateString()}</span>
                     {k.revoked_at && <Badge variant="destructive">revoked</Badge>}
                   </div>
@@ -148,31 +148,31 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       </section>
 
       <section className="max-w-xl">
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Using the API</h2>
-        <div className="rounded-xl border border-border bg-muted p-4 text-xs text-muted-foreground space-y-2">
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Using the API</h2>
+        <div className="space-y-2 rounded-lg border border-border bg-card p-4 text-label text-muted-foreground">
           <p>
-            <strong>List tables:</strong>{" "}
-            <code className="rounded bg-muted px-1">GET /v1/api/tables</code>
+            <strong className="font-w510 text-foreground">List tables:</strong>{" "}
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">GET /v1/api/tables</code>
           </p>
           <p>
-            <strong>Query rows:</strong>{" "}
-            <code className="rounded bg-muted px-1">GET /v1/api/{'{table}'}?limit=10&order_by=id</code>
+            <strong className="font-w510 text-foreground">Query rows:</strong>{" "}
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">GET /v1/api/{'{table}'}?limit=10&order_by=id</code>
           </p>
           <p>
-            <strong>Insert row:</strong>{" "}
-            <code className="rounded bg-muted px-1">POST /v1/api/{'{table}'}</code> with JSON body
+            <strong className="font-w510 text-foreground">Insert row:</strong>{" "}
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">POST /v1/api/{'{table}'}</code> with JSON body
           </p>
           <p>
-            <strong>Update row:</strong>{" "}
-            <code className="rounded bg-muted px-1">PUT /v1/api/{'{table}'}/{'{id}'}</code>
+            <strong className="font-w510 text-foreground">Update row:</strong>{" "}
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">PUT /v1/api/{'{table}'}/{'{id}'}</code>
           </p>
           <p>
-            <strong>Delete row:</strong>{" "}
-            <code className="rounded bg-muted px-1">DELETE /v1/api/{'{table}'}/{'{id}'}</code>
+            <strong className="font-w510 text-foreground">Delete row:</strong>{" "}
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">DELETE /v1/api/{'{table}'}/{'{id}'}</code>
           </p>
           <p className="mt-2 text-muted-foreground">
             Authentication:{" "}
-            <code className="rounded bg-muted px-1">Authorization: Bearer ob_...</code>
+            <code className="rounded-sm bg-foreground/[0.06] px-1 text-foreground">Authorization: Bearer ob_...</code>
           </p>
         </div>
       </section>

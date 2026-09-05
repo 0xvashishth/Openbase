@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Button, ErrorBanner, Input, Label } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ErrorBanner } from "@/components/ui/feedback";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,17 +31,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-slate-50 px-4">
+    // Auth is one of only two surfaces in the app where DESIGN.md's display
+    // scale applies — a single focal point on a full-bleed canvas, rather than
+    // the compact data density of the dashboard proper.
+    <div className="flex min-h-full items-center justify-center bg-background px-4 py-16">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-lg font-bold text-white">
+        <div className="mb-8 flex flex-col items-start">
+          {/* § Logo Mark: achromatic. The acid-lime accent belongs to the
+              submit button below — the single primary action on this view. */}
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground-strong text-caption font-w510 text-background">
             O
           </div>
-          <h1 className="mt-3 text-xl font-semibold text-slate-900">Sign in to Openbase</h1>
-          <p className="mt-1 text-sm text-slate-500">Self-hosted backend for any database</p>
+          <h1 className="mt-5 text-heading-sm font-w510 text-foreground-strong">Sign in to Openbase</h1>
+          <p className="mt-2 text-body-sm text-muted-foreground">
+            Self-hosted backend for any database
+          </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={submit} className="space-y-4 rounded-lg border border-border bg-card p-6">
           {error && <ErrorBanner message={error} />}
           <div>
             <Label htmlFor="email">Email</Label>
@@ -62,14 +72,18 @@ export default function LoginPage() {
               required
             />
           </div>
-          <Button type="submit" loading={loading} className="w-full">
+          {/* The one acid-lime element on the page. */}
+          <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
             Sign in
           </Button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
+        <p className="mt-6 text-caption text-muted-foreground">
           No account?{" "}
-          <Link href="/register" className="font-medium text-brand-600 hover:text-brand-700">
+          <Link
+            href="/register"
+            className="text-foreground underline decoration-border decoration-1 underline-offset-4 transition-colors hover:decoration-foreground"
+          >
             Create one
           </Link>
         </p>

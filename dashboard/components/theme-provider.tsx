@@ -8,7 +8,10 @@ export function ThemeProvider({
   ...props
 }: React.ComponentProps<typeof NextThemesProvider>) {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem {...props}>
+    // DESIGN.md specifies a dark system ("Theme: dark"), so dark is the
+    // default rather than following the OS. The light palette is a derivation
+    // (see app/globals.css) and remains available via the theme toggle.
+    <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem {...props}>
       {children}
     </NextThemesProvider>
   );

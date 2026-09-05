@@ -44,16 +44,16 @@ export function CodeBlock({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-lg border border-border bg-muted/40", className)}>
+    <div className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        <span className="font-mono text-micro uppercase text-muted-foreground">
           {language ?? "code"}
         </span>
         <button
           type="button"
           onClick={copy}
           aria-label={`Copy ${label}`}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-label text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           {copied ? (
             <>
@@ -66,7 +66,7 @@ export function CodeBlock({
           )}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-xs leading-relaxed">
+      <pre className="overflow-x-auto p-3 text-label leading-[1.7]">
         <code className="font-mono text-foreground">{code}</code>
       </pre>
     </div>
@@ -110,11 +110,11 @@ export function CopyField({
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-foreground">{label}</p>
+      <p className="text-label font-w510 text-foreground">{label}</p>
       <div className="flex items-stretch gap-2">
         <code
           className={cn(
-            "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-foreground",
+            "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-foreground/[0.02] px-2 py-1.5 text-label text-foreground",
             mono && "font-mono"
           )}
         >
@@ -124,13 +124,13 @@ export function CopyField({
           type="button"
           onClick={copy}
           aria-label={`Copy ${label}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 text-label text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
           <span className="sr-only">{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-label text-muted-foreground">{hint}</p>}
     </div>
   );
 }

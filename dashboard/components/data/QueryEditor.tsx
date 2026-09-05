@@ -5,7 +5,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { openbaseDark, openbaseLight } from "@/lib/editor-theme";
 import { useTheme } from "next-themes";
 import { Play, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -90,7 +90,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary">{cfg.languageLabel}</Badge>
-        <span className="text-xs text-muted-foreground">{cfg.rawNote}</span>
+        <span className="text-label text-muted-foreground">{cfg.rawNote}</span>
         {elapsed != null && result && (
           <Badge variant="muted">
             {result.rows.length} rows · {elapsed}ms
@@ -98,12 +98,12 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         <CodeMirror
           value={query}
           height="220px"
           extensions={extensions}
-          theme={mounted && resolvedTheme === "dark" ? oneDark : "light"}
+          theme={mounted && resolvedTheme === "light" ? openbaseLight : openbaseDark}
           onChange={(v) => setQuery(v)}
           placeholder={cfg.placeholder}
           basicSetup={{ lineNumbers: true, highlightActiveLineGutter: true }}
@@ -114,13 +114,13 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
         <Button onClick={() => void run()} loading={running} disabled={!query.trim()}>
           <Play className="h-4 w-4" aria-hidden /> Run
         </Button>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-label text-muted-foreground">
           Reads + writes/DDL · max 200 rows · 15s timeout · one statement per run — writes execute immediately
         </span>
       </div>
 
       {error && (
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-caption text-destructive">
           {error}
         </div>
       )}
@@ -134,7 +134,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
       {history.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">History</h3>
+            <h3 className="text-caption font-w510 text-foreground-strong">History</h3>
             <Button
               variant="ghost"
               size="sm"
@@ -153,7 +153,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
               <li key={`${i}-${h.slice(0, 24)}`}>
                 <button
                   onClick={() => setQuery(h)}
-                  className="block w-full truncate rounded-md border border-border bg-card px-3 py-1.5 text-left font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="block w-full truncate rounded-md border border-border bg-card px-3 py-1.5 text-left font-mono text-label text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
                   title={h}
                 >
                   {h.split("\n")[0].slice(0, 120)}
@@ -186,7 +186,7 @@ function QueryResults({ result }: { result: ResultSet }) {
             {rows.map((row, i) => (
               <TableRow key={i}>
                 {cols.map((c) => (
-                  <TableCell key={c} className="max-w-[320px] truncate font-mono text-xs">
+                  <TableCell key={c} className="max-w-[320px] truncate font-mono text-label">
                     {cellText(row[c])}
                   </TableCell>
                 ))}

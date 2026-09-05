@@ -1,9 +1,10 @@
 import { CardGridSkeleton } from "@/components/ui/skeletons";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function AppLoading() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <CardGridSkeleton count={6} label="Loading page" />
-    </div>
+    </PageShell>
   );
 }

@@ -54,7 +54,7 @@ export function ListSkeleton({ rows = 4, label = "Loading" }: { rows?: number; l
 
 export function FormSkeleton({ label = "Loading form" }: { label?: string }) {
   return (
-    <LoadingRegion label={label} className="max-w-xl space-y-3 rounded-xl border border-border bg-card p-4">
+    <LoadingRegion label={label} className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-4">
       <Skeleton className="h-4 w-32" />
       <Skeleton className="h-9 w-full" />
       <Skeleton className="h-3 w-3/4" />
@@ -66,7 +66,7 @@ export function FormSkeleton({ label = "Loading form" }: { label?: string }) {
 /** Matches the project overview layout: header card + 6 tool tiles. */
 export function ProjectOverviewSkeleton() {
   return (
-    <LoadingRegion label="Loading project" className="mx-auto w-full max-w-4xl space-y-4">
+    <LoadingRegion label="Loading project" className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-5 w-40" />
@@ -180,7 +180,7 @@ export function DBSourceSkeleton() {
 export function AppShellSkeleton({ label = "Loading workspace" }: { label?: string }) {
   return (
     <LoadingRegion label={label} className="flex h-full">
-      <div className="hidden w-60 shrink-0 flex-col gap-2 border-r border-border bg-background p-3 md:flex">
+      <div className="hidden w-60 shrink-0 flex-col gap-2 border-r border-border bg-card p-3 md:flex">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-8 w-full" />
@@ -188,7 +188,7 @@ export function AppShellSkeleton({ label = "Loading workspace" }: { label?: stri
       </div>
       <div className="min-w-0 flex-1">
         <Skeleton className="h-14 w-full rounded-none" />
-        <div className="mx-auto max-w-6xl space-y-3 px-6 py-6">
+        <div className="mx-auto w-full max-w-shell space-y-3 px-4 py-6 sm:px-6">
           <Skeleton className="h-6 w-48" />
           <Skeleton className="h-32 w-full" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

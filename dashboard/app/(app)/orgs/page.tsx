@@ -6,14 +6,15 @@ import { OrgList } from "@/components/orgs/OrgList";
 import { CreateOrgForm } from "@/components/orgs/CreateOrgForm";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function OrganizationsPage() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <PageShell>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Your organizations</p>
+        <p className="text-caption text-muted-foreground">Your organizations</p>
         <Button onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" aria-hidden /> New organization
         </Button>
@@ -30,6 +31,6 @@ export default function OrganizationsPage() {
       </Dialog>
 
       <OrgList />
-    </div>
+    </PageShell>
   );
 }

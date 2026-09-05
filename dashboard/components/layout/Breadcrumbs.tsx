@@ -101,7 +101,7 @@ export function Breadcrumbs({ items, info }: { items: Crumb[]; info?: string }) 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
       <div className="flex min-w-0 items-center gap-0.5">
-      <ol className="flex min-w-0 items-center gap-1 text-sm">
+      <ol className="flex min-w-0 items-center gap-1 text-caption">
         {items.map((item, i) => {
           const last = i === items.length - 1;
           return (
@@ -130,13 +130,13 @@ export function Breadcrumbs({ items, info }: { items: Crumb[]; info?: string }) 
                     <Skeleton className="h-4 w-20 sm:w-24" />
                   </span>
                 ) : last || !item.href ? (
-                  <span aria-current={last ? "page" : undefined} className="truncate font-medium text-foreground">
+                  <span aria-current={last ? "page" : undefined} className="truncate font-w510 text-foreground-strong">
                     {item.label}
                   </span>
                 ) : (
                   <Link
                     href={item.href}
-                    className="truncate text-muted-foreground transition-colors hover:text-foreground"
+                    className="truncate font-normal text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {item.label}
                   </Link>
@@ -147,7 +147,7 @@ export function Breadcrumbs({ items, info }: { items: Crumb[]; info?: string }) 
                       <button
                         type="button"
                         aria-label={item.dropdownLabel ?? `Switch ${item.label}`}
-                        className="shrink-0 rounded p-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                        className="shrink-0 rounded-sm p-0.5 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring"
                       >
                         <ChevronDown className="h-3.5 w-3.5" aria-hidden />
                       </button>
@@ -179,7 +179,7 @@ export function Breadcrumbs({ items, info }: { items: Crumb[]; info?: string }) 
               <button
                 type="button"
                 aria-label={`About ${currentLabel}`}
-                className="shrink-0 rounded p-0.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 rounded-sm p-0.5 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <Info className="h-3.5 w-3.5" aria-hidden />
               </button>

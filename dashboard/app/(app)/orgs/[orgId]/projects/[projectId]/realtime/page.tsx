@@ -3,14 +3,15 @@
 import { useParams } from "next/navigation";
 import { RealtimeDemo } from "@/components/data/RealtimeDemo";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function RealtimePage() {
   const params = useParams<{ projectId: string }>();
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
+    <PageShell>
       <ProjectGuard requireConnection requireRealtime toolName="Realtime">
         <RealtimeDemo projectId={params.projectId} />
       </ProjectGuard>
-    </div>
+    </PageShell>
   );
 }

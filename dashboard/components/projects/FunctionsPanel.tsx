@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
+import { SegmentedOption } from "@/components/ui/segmented";
 import type { Function } from "@/lib/types";
 
 const TEMPLATES: Record<string, string> = {
@@ -106,7 +107,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">New Function</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">New Function</h2>
         <form onSubmit={create} className="max-w-3xl space-y-3">
           <div className="flex items-end gap-3">
             <div className="flex-1">
@@ -121,30 +122,12 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
             <div>
               <Label>Runtime</Label>
               <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => pickRuntime("node")}
-                  aria-pressed={runtime === "node"}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    runtime === "node"
-                      ? "border-primary bg-accent text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
+                <SegmentedOption selected={runtime === "node"} onClick={() => pickRuntime("node")} className="h-8">
                   Node
-                </button>
-                <button
-                  type="button"
-                  onClick={() => pickRuntime("python")}
-                  aria-pressed={runtime === "python"}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    runtime === "python"
-                      ? "border-primary bg-accent text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
+                </SegmentedOption>
+                <SegmentedOption selected={runtime === "python"} onClick={() => pickRuntime("python")} className="h-8">
                   Python
-                </button>
+                </SegmentedOption>
               </div>
             </div>
           </div>
@@ -156,7 +139,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
               onChange={(e) => setSource(e.target.value)}
               rows={10}
               spellCheck={false}
-              className="w-full rounded-lg border border-input bg-muted p-3 font-mono text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-foreground/[0.02] p-3 font-mono text-label leading-[1.7] text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
             />
           </div>
           <Button type="submit" loading={creating}>
@@ -168,7 +151,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Functions</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Functions</h2>
         {functions.length === 0 ? (
           <EmptyState
             title="No functions yet"
@@ -183,10 +166,10 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{f.name}</span>
+                      <span className="truncate text-caption font-w510 text-foreground-strong">{f.name}</span>
                       <Badge variant="secondary">{f.runtime}</Badge>
                   </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
+                  <div className="mt-1 text-label text-muted-foreground">
                     created {new Date(f.created_at).toLocaleDateString()}
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
+import { SegmentedOption } from "@/components/ui/segmented";
 import type { Function, Trigger, TriggerActionType, TriggerEvent } from "@/lib/types";
 
 const EVENTS: { value: TriggerEvent; label: string }[] = [
@@ -136,7 +137,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">New Trigger</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">New Trigger</h2>
         <form onSubmit={create} className="max-w-3xl space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -155,7 +156,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                   id="trig-collection"
                   value={collection}
                   onChange={(e) => setCollection(e.target.value)}
-                  className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="h-8 w-full rounded-md border border-input bg-foreground/[0.02] px-2.5 text-caption text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
                 >
                   <option value="">Select a table…</option>
                   {collections.map((c) => (
@@ -188,19 +189,9 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
             <Label>Event</Label>
             <div className="flex gap-1">
               {EVENTS.map((ev) => (
-                <button
-                  key={ev.value}
-                  type="button"
-                  onClick={() => setEvent(ev.value)}
-                  aria-pressed={event === ev.value}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    event === ev.value
-                      ? "border-primary bg-accent text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
+                <SegmentedOption key={ev.value} selected={event === ev.value} onClick={() => setEvent(ev.value)} className="h-8">
                   {ev.label}
-                </button>
+                </SegmentedOption>
               ))}
             </div>
           </div>
@@ -209,30 +200,12 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
             <Label>Action</Label>
             <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
               <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setActionType("function")}
-                  aria-pressed={actionType === "function"}
-                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    actionType === "function"
-                      ? "border-primary bg-accent text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
+                <SegmentedOption selected={actionType === "function"} onClick={() => setActionType("function")} className="h-8 flex-1">
                   Function
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActionType("webhook")}
-                  aria-pressed={actionType === "webhook"}
-                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    actionType === "webhook"
-                      ? "border-primary bg-accent text-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
+                </SegmentedOption>
+                <SegmentedOption selected={actionType === "webhook"} onClick={() => setActionType("webhook")} className="h-8 flex-1">
                   Webhook
-                </button>
+                </SegmentedOption>
               </div>
               {actionType === "webhook" ? (
                 <Input
@@ -244,7 +217,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                 <select
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="h-8 w-full rounded-md border border-input bg-foreground/[0.02] px-2.5 text-caption text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
                 >
                   <option value="">Select a function…</option>
                   {functions.map((f) => (
@@ -266,7 +239,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
       {error && <ErrorBanner message={error} />}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Triggers</h2>
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Triggers</h2>
         {triggers.length === 0 ? (
           <EmptyState
             title="No triggers yet"
@@ -281,19 +254,19 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">{t.name}</span>
+                    <span className="truncate text-caption font-w510 text-foreground-strong">{t.name}</span>
                     {t.enabled ? (
                       <StatusBadge tone="success">enabled</StatusBadge>
                     ) : (
                       <StatusBadge tone="muted">disabled</StatusBadge>
                     )}
                   </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
+                  <div className="mt-1 text-label text-muted-foreground">
                     when{" "}
-                    <span className="font-medium text-muted-foreground">{t.event}</span> on{" "}
-                    <span className="font-medium text-muted-foreground">{t.collection}</span>{" "}
+                    <span className="font-mono text-foreground">{t.event}</span> on{" "}
+                    <span className="font-mono text-foreground">{t.collection}</span>{" "}
                     {t.action_type === "function" ? "run" : "call"}{" "}
-                    <span className="font-mono text-muted-foreground">{targetLabel(t)}</span>
+                    <span className="font-mono text-foreground">{targetLabel(t)}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

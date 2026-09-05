@@ -159,8 +159,8 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-4">
       <section className="max-w-2xl">
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Live updates</h2>
-        <p className="mb-3 text-xs text-muted-foreground">
+        <h2 className="mb-2 text-caption font-w510 text-foreground-strong">Live updates</h2>
+        <p className="mb-3 text-label text-muted-foreground">
           Pick a table and subscribe. Insert a row (via the auto-generated REST API) and watch it
           appear instantly over the WebSocket gateway.
         </p>
@@ -171,7 +171,7 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
               id="rt-collection"
               value={collection}
               onChange={(e) => setCollection(e.target.value)}
-              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 w-full rounded-md border border-input bg-foreground/[0.02] px-2.5 text-caption text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
             >
               <option value="">Select a table…</option>
               {collections.map((c) => (
@@ -186,8 +186,8 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
           </Button>
         </div>
         {connected && (
-          <div className="mt-2 flex items-center gap-2 text-xs">
-            <span className="h-2 w-2 rounded-full bg-success/100" />
+          <div className="mt-2 flex items-center gap-2 text-label">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" aria-hidden />
             <span className="text-muted-foreground">live — listening on {collection}</span>
           </div>
         )}
@@ -197,7 +197,7 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
 
       {connected && (
         <section className="max-w-2xl">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">Insert a row</h3>
+          <h3 className="mb-2 text-caption font-w510 text-foreground-strong">Insert a row</h3>
           <form onSubmit={insertRow} className="flex items-end gap-3">
             <div className="flex-1">
               <Label htmlFor="rt-name">name</Label>
@@ -217,18 +217,18 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
 
       {connected && (
         <section className="max-w-2xl">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">
+          <h3 className="mb-2 text-caption font-w510 text-foreground-strong">
             {collection} <span className="font-normal text-muted-foreground">(live)</span>
           </h3>
-          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
             {rows.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-muted-foreground">No rows yet.</div>
+              <div className="px-4 py-6 text-center text-caption text-muted-foreground">No rows yet.</div>
             ) : (
-              <table className="w-full min-w-[480px] text-left text-sm">
-                <thead className="bg-muted text-xs uppercase text-muted-foreground">
+              <table className="w-full min-w-[480px] text-left text-caption">
+                <thead className="border-b border-border text-label text-muted-foreground">
                   <tr>
                     {Object.keys(rows[0]).map((k) => (
-                      <th key={k} className="px-4 py-2 font-medium">
+                      <th key={k} className="whitespace-nowrap px-3 py-2 font-w510">
                         {k}
                       </th>
                     ))}
@@ -238,7 +238,7 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
                   {rows.map((r, i) => (
                     <tr key={i} className="text-muted-foreground">
                       {Object.entries(r).map(([k, v]) => (
-                        <td key={k} className="px-4 py-2">
+                        <td key={k} className="px-3 py-2 font-mono text-label">
                           {String(v)}
                         </td>
                       ))}
