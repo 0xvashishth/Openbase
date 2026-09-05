@@ -586,3 +586,110 @@ func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request) {
 		"demoted_self":   req.DemoteSelf,
 	})
 }
+
+type updateProjectRequest struct {
+	Name *string `json:"name,omitempty"`
+	Slug *string `json:"slug,omitempty"`
+}
+
+// updateProject handles PATCH /v1/projects/{projectID} - admin+ can rename/slug
+func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	_, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	var req updateProjectRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		req.Name = &trimmed
+		if *req.Name == "" {
+			writeError(w, http.StatusBadRequest, "name cannot be empty")
+			return
+		}
+	}
+	if req.Slug != nil {
+		trimmed := strings.TrimSpace(*req.Slug)
+		req.Slug = &trimmed
+		if *req.Slug == "" {
+			writeError(w, http.StatusBadRequest, "slug cannot be empty")
+			return
+		}
+	}
+	if req.Name == nil && req.Slug == nil {
+		writeError(w, http.StatusBadRequest, "no fields to update")
+		return
+	}
+
+	p, err := s.svc.Store.GetProject(r.Context(), projectID)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if req.Name != nil {
+		p.Name = *req.Name
+	}
+	if req.Slug != nil {
+		p.Slug = *req.Slug
+	}
+	if err := s.svc.Store.UpdateProject(r.Context(), p); err != nil {
+		if metadata.IsConflict(err) {
+			writeError(w, http.StatusConflict, "slug already in use in this org")
+			return
+		}
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+// deleteProject handles DELETE /v1/projects/{projectID} - owner only
+// Cascade delete: destroy provisioned container, stop triggers, revoke keys, invalidate pool, delete project row
+func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	_, org, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleOwner)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	// Get connection to check for provisioned container
+	conn, err := s.svc.Store.GetConnectionByProject(r.Context(), projectID)
+	if err != nil && !errors.Is(err, metadata.ErrNotFound) {
+		s.writeErr(w, err)
+		return
+	}
+
+	// If provisioned, destroy the container first
+	if conn != nil && conn.Mode == metadata.ModeProvisioned && conn.ContainerID != nil && *conn.ContainerID != "" && s.svc.Provisioner != nil {
+		if err := s.svc.Provisioner.Destroy(r.Context(), projectID); err != nil {
+			s.writeErr(w, err)
+			return
+		}
+	}
+
+	// Stop triggers for this project
+	if s.svc.TriggerService != nil {
+		s.svc.TriggerService.StopProject(projectID)
+	}
+
+	// Invalidate adapter pool and pkCache
+	s.invalidateProjectAdapters(projectID)
+
+	// Delete project (cascades to connections, api_keys, triggers, functions via DB)
+	if err := s.svc.Store.DeleteProject(r.Context(), projectID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	// Audit log (Phase 9.8 will wire a real sink; for now log via slog)
+	s.svc.Log.Info("project deleted", "org", org.ID, "project", projectID, "actor", userIDFromContext(r.Context()))
+
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}

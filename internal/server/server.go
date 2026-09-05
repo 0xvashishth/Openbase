@@ -177,6 +177,8 @@ func New(svc *Services) Handler {
 	// Single-project resolver: the dashboard previously listed every project in
 	// an org just to render one.
 	mux.Handle("GET /v1/projects/{projectID}", s.requireAuth(http.HandlerFunc(s.getProject)))
+	mux.Handle("PATCH /v1/projects/{projectID}", s.requireAuth(http.HandlerFunc(s.updateProject)))
+	mux.Handle("DELETE /v1/projects/{projectID}", s.requireAuth(http.HandlerFunc(s.deleteProject)))
 
 	mux.Handle("GET /v1/projects/{projectID}/connections", s.requireAuth(http.HandlerFunc(s.getConnection)))
 	mux.Handle("POST /v1/projects/{projectID}/connections/test", s.requireAuth(http.HandlerFunc(s.testConnection)))
