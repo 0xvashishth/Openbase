@@ -14,12 +14,29 @@ export interface AuthResponse {
   user: User;
 }
 
+export type OrgRole = "owner" | "admin" | "member";
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  full_name?: string;
+  role: OrgRole;
+  joined_at: string;
+}
+
+/**
+ * Organization as returned by the API. `role` is the *caller's* role in this
+ * org — the server folds it into every org-scoped payload (orgView) so the
+ * dashboard can gate UI without a second round-trip.
+ */
 export interface Organization {
   id: string;
   name: string;
   slug: string;
   created_by: string;
   created_at: string;
+  updated_at?: string;
+  role?: OrgRole;
 }
 
 export interface Project {
@@ -29,6 +46,7 @@ export interface Project {
   slug: string;
   created_by: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export type ConnectionMode = "provisioned" | "byodb";

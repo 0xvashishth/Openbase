@@ -8,6 +8,8 @@ import type {
   FullSchema,
   Function,
   Organization,
+  OrgMember,
+  OrgRole,
   Project,
   QueryRowsRequest,
   ResultSet,
@@ -200,4 +202,38 @@ export const api = {
     request<Function>("GET", `/v1/projects/${projectId}/functions/${fnId}`, undefined, token),
   deleteFunction: (token: string, projectId: string, fnId: string) =>
     request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/functions/${fnId}`, undefined, token),
+
+  // Organization settings.
+  updateOrg: (token: string, orgId: string, name?: string, slug?: string) =>
+    request<{ id: string; name: string; slug: string }>(
+      "PATCH", `/v1/orgs/${orgId}`, { name, slug }, token
+    ),
+  deleteOrg: (token: string, orgId: string, slug: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/orgs/${orgId}`, { slug }, token),
+
+  // Member management.
+  listMembers: (token: string, orgId: string) =>
+    request<OrgMember[]>("GET", `/v1/orgs/${orgId}/members`, undefined, token),
+  addMember: (token: string, orgId: string, email: string, role: OrgRole) =>
+    request<{ user_id: string; email: string; role: OrgRole }>(
+      "POST", `/v1/orgs/${orgId}/members`, { email, role }, token
+    ),
+  updateMemberRole: (token: string, orgId: string, userId: string, role: OrgRole) =>
+    request<{ role: OrgRole }>(
+      "PATCH", `/v1/orgs/${orgId}/members/${userId}`, { role }, token
+    ),
+removeMember: (token: string, orgId: string, userId: string) =>
+    request<{ left: boolean }>("DELETE", `/v1/orgs/${orgId}/members/${userId}`, undefined, token),
+
+  transferOwnership: (token: string, orgId: string, userId: string, demote?: boolean) => {
+    return request<{ transferred_to: string; demote: boolean }>(
+      "POST", `/v1/orgs/${orgId}/transfer-ownership`, { user_id: userId, demote: demote }, token
+    );
+  },
+
+  // Project settings.
+  updateProject: (token: string, projectId: string, name?: string, slug?: string) =>
+    request<Project>("PATCH", `/v1/projects/${projectId}`, { name, slug }, token),
+  deleteProject: (token: string, projectId: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}`, undefined, token),
 };

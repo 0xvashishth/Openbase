@@ -3,8 +3,6 @@
 import { usePathname } from "next/navigation";
 import * as React from "react";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { api } from "@/lib/api";
-import { authToken } from "@/components/AuthProvider";
 import { parseRoute } from "./nav";
 import { PlatformSidebar } from "./PlatformSidebar";
 import { OrgSidebar } from "./OrgSidebar";
@@ -13,6 +11,7 @@ import { Topbar } from "./Topbar";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { StatusBar } from "./StatusBar";
+import { OrgProvider, useOrg } from "@/lib/org-context";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { cn } from "@/lib/utils";
 
@@ -239,25 +238,16 @@ function ShellChrome({
   );
 }
 
-function ShellInner({ children, currentPath }: { children: React.ReactNode; currentPath: string }) {
+/**
+ * Org-scoped chrome. Reads the org (and the caller's role) from OrgProvider so
+ * the single getOrg call that already powered the breadcrumb now also drives
+ * every RBAC gate in the page below — no extra request.
+ */
+function OrgScopedShell({ currentPath, children }: { currentPath: string; children: React.ReactNode }) {
   const route = parseRoute(currentPath);
-  const [orgName, setOrgName] = React.useState<string | undefined>(undefined);
-  const [orgLoading, setOrgLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    const token = authToken();
-    if (!token || !route.orgId) {
-      setOrgName(undefined);
-      setOrgLoading(false);
-      return;
-    }
-    setOrgLoading(true);
-    api
-      .getOrg(token, route.orgId)
-      .then((o) => setOrgName(o.name))
-      .catch(() => setOrgName(undefined))
-      .finally(() => setOrgLoading(false));
-  }, [route.orgId]);
+  const { org, loading } = useOrg();
+  const orgName = org?.name;
+  const orgLoading = loading && !orgName;
 
   if (route.scope === "project" && route.orgId && route.projectId) {
     return (
@@ -266,17 +256,34 @@ function ShellInner({ children, currentPath }: { children: React.ReactNode; curr
       </ProjectShell>
     );
   }
-  if (route.scope === "org" && route.orgId) {
+  return (
+    <ShellChrome
+      currentPath={currentPath}
+      sidebar={
+        <OrgSidebar
+          orgId={route.orgId ?? ""}
+          orgName={orgName}
+          loading={orgLoading}
+          currentPath={currentPath}
+        />
+      }
+      orgId={route.orgId}
+      orgName={orgName}
+      orgLoading={orgLoading}
+    >
+      {children}
+    </ShellChrome>
+  );
+}
+
+function ShellInner({ children, currentPath }: { children: React.ReactNode; currentPath: string }) {
+  const route = parseRoute(currentPath);
+
+  if (route.orgId) {
     return (
-      <ShellChrome
-        currentPath={currentPath}
-        sidebar={<OrgSidebar orgId={route.orgId} orgName={orgName} loading={orgLoading && !orgName} currentPath={currentPath} />}
-        orgId={route.orgId}
-        orgName={orgName}
-        orgLoading={orgLoading && !orgName}
-      >
-        {children}
-      </ShellChrome>
+      <OrgProvider orgId={route.orgId}>
+        <OrgScopedShell currentPath={currentPath}>{children}</OrgScopedShell>
+      </OrgProvider>
     );
   }
   return (
