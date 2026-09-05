@@ -11,6 +11,7 @@ import {
   Label,
 } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import { SegmentedOption } from "@/components/ui/segmented";
 import type { Function } from "@/lib/types";
@@ -35,6 +36,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
   const [source, setSource] = useState(TEMPLATES.node);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Function | null>(null);
 
   async function load() {
     const token = authToken();
@@ -84,14 +86,16 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm("Delete this function? Triggers referencing it will fail.")) return;
-    setDeleting(id);
+  async function remove() {
+    const fn = pendingDelete;
+    if (!fn) return;
+    setDeleting(fn.id);
     setError(null);
     try {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
-      await api.deleteFunction(token, projectId, id);
+      await api.deleteFunction(token, projectId, fn.id);
+      setPendingDelete(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete function");
@@ -173,7 +177,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
                     created {new Date(f.created_at).toLocaleDateString()}
                   </div>
                 </div>
-                <Button variant="danger" onClick={() => remove(f.id)} loading={deleting === f.id}>
+                <Button variant="danger" onClick={() => setPendingDelete(f)} loading={deleting === f.id}>
                   Delete
                 </Button>
               </div>
@@ -181,6 +185,16 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete function "${pendingDelete?.name ?? ""}"?`}
+        description="Any trigger that invokes this function will start failing. This cannot be undone."
+        confirmLabel="Delete function"
+        loading={deleting !== null}
+        onConfirm={remove}
+      />
     </div>
   );
 }

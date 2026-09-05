@@ -5,6 +5,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
+import { Input } from "./input";
+import { Label } from "./label";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -78,6 +80,17 @@ const DialogDescription = React.forwardRef<
 ));
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
+/**
+ * Destructive-confirmation dialog.
+ *
+ * `confirmPhrase` gates the confirm button behind an exact typed match — the
+ * standard treatment for irreversible operations (delete org, delete project).
+ * The comparison is exact, not case-insensitive: a slug is a literal, and
+ * "close enough" is the wrong bar for something unrecoverable.
+ *
+ * Filled coral (`destructive-solid`) lives here and nowhere else; page-level
+ * triggers use the coral outline (DESIGN.md § Components).
+ */
 function ConfirmDialog({
   open,
   onOpenChange,
@@ -86,6 +99,10 @@ function ConfirmDialog({
   confirmLabel = "Confirm",
   onConfirm,
   loading,
+  confirmPhrase,
+  confirmPhraseLabel,
+  children,
+  error,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,7 +111,27 @@ function ConfirmDialog({
   confirmLabel?: string;
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  /** When set, the confirm button stays disabled until the user types this exactly. */
+  confirmPhrase?: string;
+  /** Label above the confirmation input. Defaults to a slug-style prompt. */
+  confirmPhraseLabel?: string;
+  /** Extra body content — e.g. an enumeration of what will be destroyed. */
+  children?: React.ReactNode;
+  /** Server-side failure surfaced inside the dialog rather than behind it. */
+  error?: React.ReactNode;
 }) {
+  const [typed, setTyped] = React.useState("");
+  const inputId = React.useId();
+
+  // Reset the gate whenever the dialog reopens, so a previous successful match
+  // can't pre-arm the next confirmation.
+  React.useEffect(() => {
+    if (open) setTyped("");
+  }, [open]);
+
+  const gated = Boolean(confirmPhrase);
+  const matches = !gated || typed === confirmPhrase;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -102,11 +139,37 @@ function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
+        {children}
+        {gated && (
+          <div className="space-y-1.5">
+            <Label htmlFor={inputId}>
+              {confirmPhraseLabel ?? (
+                <>
+                  Type <span className="font-mono text-foreground-strong">{confirmPhrase}</span> to confirm
+                </>
+              )}
+            </Label>
+            <Input
+              id={inputId}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+            />
+          </div>
+        )}
+        {error}
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button variant="destructive-solid" loading={loading} onClick={() => void onConfirm()}>
+          <Button
+            variant="destructive-solid"
+            loading={loading}
+            disabled={!matches}
+            onClick={() => void onConfirm()}
+          >
             {confirmLabel}
           </Button>
         </DialogFooter>

@@ -11,6 +11,7 @@ import {
   Label,
 } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import { SegmentedOption } from "@/components/ui/segmented";
 import type { Function, Trigger, TriggerActionType, TriggerEvent } from "@/lib/types";
@@ -37,6 +38,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
   const [creating, setCreating] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Trigger | null>(null);
 
   async function load() {
     const token = authToken();
@@ -111,14 +113,16 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  async function remove(t: Trigger) {
-    if (!window.confirm(`Delete trigger "${t.name}"?`)) return;
+  async function remove() {
+    const t = pendingDelete;
+    if (!t) return;
     setDeleting(t.id);
     setError(null);
     try {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
       await api.deleteTrigger(token, projectId, t.id);
+      setPendingDelete(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete trigger");
@@ -273,7 +277,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
                   <Button variant="ghost" onClick={() => toggle(t)} loading={toggling === t.id}>
                     {t.enabled ? "Disable" : "Enable"}
                   </Button>
-                  <Button variant="danger" onClick={() => remove(t)} loading={deleting === t.id}>
+                  <Button variant="danger" onClick={() => setPendingDelete(t)} loading={deleting === t.id}>
                     Delete
                   </Button>
                 </div>
@@ -282,6 +286,16 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete trigger "${pendingDelete?.name ?? ""}"?`}
+        description="The trigger stops firing immediately. Its target function or webhook is left in place."
+        confirmLabel="Delete trigger"
+        loading={deleting !== null}
+        onConfirm={remove}
+      />
     </div>
   );
 }

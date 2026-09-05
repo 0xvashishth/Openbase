@@ -6,6 +6,7 @@ import { authToken } from "@/components/AuthProvider";
 import { TableBrowser } from "@/components/data/TableBrowser";
 import { Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
 import { Badge, StatusBadge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableBrowserSkeleton } from "@/components/ui/skeletons";
 import { SegmentedOption } from "@/components/ui/segmented";
@@ -26,6 +27,7 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
   const [connString, setConnString] = useState("");
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -89,7 +91,6 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
   }
 
   async function remove() {
-    if (!window.confirm("Remove this connection? A provisioned database will be destroyed.")) return;
     setRemoving(true);
     setError(null);
     try {
@@ -97,6 +98,7 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
       if (!token) throw new Error("Not authenticated");
       await api.deleteConnection(token, projectId);
       setConn(null);
+      setConfirmRemove(false);
       setMessage("Connection removed.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove connection");
@@ -214,7 +216,7 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
                 </span>
               )}
             </div>
-            <Button variant="danger" onClick={remove} loading={removing}>
+            <Button variant="danger" onClick={() => setConfirmRemove(true)} loading={removing}>
               Remove
             </Button>
           </div>
@@ -239,6 +241,20 @@ export function DBSourcePanel({ projectId }: { projectId: string }) {
           />
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmRemove}
+        onOpenChange={setConfirmRemove}
+        title="Remove this database?"
+        description={
+          (conn as Connection)?.mode === "provisioned"
+            ? "The provisioned container and all data in it are destroyed. This is not recoverable — there is no backup."
+            : "Openbase forgets the saved credentials. Your database itself is left untouched."
+        }
+        confirmLabel="Remove database"
+        loading={removing}
+        onConfirm={remove}
+      />
     </div>
   );
 }

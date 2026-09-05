@@ -15,6 +15,7 @@ import {
   Settings,
   SquareTerminal,
   Table2,
+  Users,
   Zap,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -115,6 +116,26 @@ export function GlobalSearch() {
           hint: o.slug,
           href: `/orgs/${o.id}`,
           icon: <Building2 className="h-4 w-4" />,
+        });
+      }
+      // Org-scoped destinations for the org you are currently in. These pages
+      // are reachable from the sidebar but were previously unsearchable.
+      if (route.orgId) {
+        found.push({
+          id: "org-members",
+          group: "Organizations",
+          label: "Members",
+          hint: "Current organization",
+          href: `/orgs/${route.orgId}/members`,
+          icon: <Users className="h-4 w-4" />,
+        });
+        found.push({
+          id: "org-settings",
+          group: "Organizations",
+          label: "Organization settings",
+          hint: "Current organization",
+          href: `/orgs/${route.orgId}/settings`,
+          icon: <Settings className="h-4 w-4" />,
         });
       }
       const projectLists = await Promise.all(

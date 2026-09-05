@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -128,11 +128,13 @@ describe("DBSourcePanel", () => {
   it("removes the connection after confirmation", async () => {
     vi.mocked(api.getConnection).mockResolvedValue(connected);
     vi.mocked(api.deleteConnection).mockResolvedValue({ removed: true });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
     render(<DBSourcePanel projectId="p1" />);
 
     await user.click(await screen.findByRole("button", { name: "Remove" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Remove database" })
+    );
 
     await waitFor(() => expect(api.deleteConnection).toHaveBeenCalledWith("tok", "p1"));
     expect(await screen.findByText("No database attached")).toBeInTheDocument();
@@ -140,11 +142,38 @@ describe("DBSourcePanel", () => {
 
   it("keeps the connection when removal is cancelled", async () => {
     vi.mocked(api.getConnection).mockResolvedValue(connected);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = userEvent.setup();
     render(<DBSourcePanel projectId="p1" />);
 
     await user.click(await screen.findByRole("button", { name: "Remove" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(api.deleteConnection).not.toHaveBeenCalled();
+  });
+
+  /**
+   * BYODB and provisioned have opposite blast radii: one forgets credentials,
+   * the other destroys the customer's data (no persistent volumes yet — see
+   * PHASES 18.1). The dialog copy has to distinguish them.
+   */
+  it("warns that a provisioned database is unrecoverable", async () => {
+    vi.mocked(api.getConnection).mockResolvedValue({ ...connected, mode: "provisioned" });
+    const user = userEvent.setup();
+    render(<DBSourcePanel projectId="p1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(
+      within(screen.getByRole("dialog")).getByText(/not recoverable — there is no backup/i)
+    ).toBeInTheDocument();
+  });
+
+  it("tells a BYODB user their database is left untouched", async () => {
+    vi.mocked(api.getConnection).mockResolvedValue(connected);
+    const user = userEvent.setup();
+    render(<DBSourcePanel projectId="p1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(
+      within(screen.getByRole("dialog")).getByText(/your database itself is left untouched/i)
+    ).toBeInTheDocument();
   });
 });

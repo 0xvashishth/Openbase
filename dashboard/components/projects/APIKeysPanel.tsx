@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { FormSkeleton, ListSkeleton } from "@/components/ui/skeletons";
 import type { APIKeyView } from "@/lib/types";
 
@@ -16,6 +17,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [pendingRevoke, setPendingRevoke] = useState<string | null>(null);
 
   async function load() {
     const token = authToken();
@@ -54,14 +56,16 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  async function revoke(id: string) {
-    if (!window.confirm("Revoke this API key? This cannot be undone.")) return;
+  async function revoke() {
+    const id = pendingRevoke;
+    if (!id) return;
     setRevoking(id);
     setError(null);
     try {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
       await api.revokeAPIKey(token, projectId, id);
+      setPendingRevoke(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke key");
@@ -135,7 +139,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
                 {!k.revoked_at && (
                   <Button
                     variant="danger"
-                    onClick={() => revoke(k.id)}
+                    onClick={() => setPendingRevoke(k.id)}
                     loading={revoking === k.id}
                   >
                     Revoke
@@ -176,6 +180,16 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
           </p>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onOpenChange={(open) => !open && setPendingRevoke(null)}
+        title="Revoke this API key?"
+        description="Any app still sending this key starts receiving 401s immediately. This cannot be undone."
+        confirmLabel="Revoke key"
+        loading={revoking !== null}
+        onConfirm={revoke}
+      />
     </div>
   );
 }
