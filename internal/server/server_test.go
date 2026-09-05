@@ -39,6 +39,20 @@ func newTestServer(t *testing.T) *testServer {
 	return newTestServerWith(t, nil)
 }
 
+// getUserID extracts the user ID from the /me endpoint response.
+func (ts *testServer) getUserID(t *testing.T, tok string) string {
+	t.Helper()
+	resp, js := ts.do(t, "GET", "/v1/me", tok, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get user id status = %d", resp.StatusCode)
+	}
+	id, ok := js["id"].(string)
+	if !ok {
+		t.Fatalf("no id in me response")
+	}
+	return id
+}
+
 // newTestServerWith builds a server injecting an optional Provisioner (used by
 // provisioning tests) while keeping the standard real-DB harness.
 func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {

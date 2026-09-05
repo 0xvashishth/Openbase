@@ -19,11 +19,28 @@ import (
 	"github.com/openbase/openbase/internal/realtime"
 )
 
+// AuditSink records audit events. The no-op default ignores all calls;
+// when 9.8 lands, swap in a writer that persists to audit_events.
+type AuditSink interface {
+	Record(ctx context.Context, actorUserID, orgID, projectID string, action, targetType string, targetID any, metadata map[string]any) error
+}
+
+// NoopAuditSink is a do-nothing implementation; handlers call Record()
+// and when 9.8 lands the server swaps this for a real writer.
+type NoopAuditSink struct{}
+
+func (s *NoopAuditSink) Record(_ context.Context, _ string, _ string, _ string, _ string, _ string, _ any, _ map[string]any) error {
+	return nil
+}
+
 // Services carries the dependencies the API handlers need.
 type Services struct {
 	Store  metadata.Store
 	Tokens *auth.TokenManager
 	Log    *slog.Logger
+
+	// AuditSink records audit events. Swap in a real writer for 9.8.
+	AuditSink AuditSink
 
 	// AdapterFactory resolves and connects an adapter for a project
 	// connection. Injected so tests and provisioning modes can differ.

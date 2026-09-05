@@ -225,13 +225,14 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "update", "organization", org, nil)
 	writeJSON(w, http.StatusOK, orgView{Organization: org, Role: m.Role})
 }
 
 // deleteOrg handles DELETE /v1/orgs/{orgID} - owner only, requires slug confirmation
 func (s *Server) deleteOrg(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	_, err := s.authorizeOrgRole(r, orgID, metadata.RoleOwner)
+	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleOwner)
 	if err != nil {
 		s.writeErr(w, err)
 		return
@@ -278,6 +279,7 @@ func (s *Server) deleteOrg(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "delete", "organization", org, nil)
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
@@ -394,7 +396,7 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "add_member", "membership", user, map[string]any{"role": role})
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"user_id": user.ID,
 		"email":   user.Email,
@@ -476,6 +478,7 @@ func (s *Server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "update_member", "membership", target, map[string]any{"new_role": newRole})
 	writeJSON(w, http.StatusOK, map[string]any{"role": newRole})
 }
 
@@ -502,6 +505,7 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 			s.writeErr(w, err)
 			return
 		}
+		s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "remove_member_self", "membership", nil, nil)
 		writeJSON(w, http.StatusOK, map[string]any{"left": true})
 		return
 	}
@@ -538,13 +542,14 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "remove_member", "membership", target, nil)
 	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
 }
 
 // transferOwnership handles POST /v1/orgs/{orgID}/transfer-ownership - owner only
 func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	_, err := s.authorizeOrgRole(r, orgID, metadata.RoleOwner)
+	m, err := s.authorizeOrgRole(r, orgID, metadata.RoleOwner)
 	if err != nil {
 		s.writeErr(w, err)
 		return
@@ -577,10 +582,11 @@ func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.svc.Store.TransferOwnership(r.Context(), orgID, actorID, req.UserID, req.DemoteSelf); err != nil {
+	if err := s.svc.Store.TransferOwnership(r.Context(), orgID, m.UserID, req.UserID, req.DemoteSelf); err != nil {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, orgID, "", "transfer_ownership", "membership", nil, map[string]any{"demote_self": req.DemoteSelf})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"transferred_to": req.UserID,
 		"demoted_self":   req.DemoteSelf,
@@ -595,7 +601,7 @@ type updateProjectRequest struct {
 // updateProject handles PATCH /v1/projects/{projectID} - admin+ can rename/slug
 func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	_, _, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin)
+	_, org, m, err := s.projectAndOrgRole(r, projectID, metadata.RoleAdmin)
 	if err != nil {
 		s.writeErr(w, err)
 		return
@@ -646,6 +652,7 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.svc.AuditSink.Record(r.Context(), m.UserID, org.ID, projectID, "update_project", "project", p, nil)
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -653,7 +660,7 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 // Cascade delete: destroy provisioned container, stop triggers, revoke keys, invalidate pool, delete project row
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("projectID")
-	_, org, _, err := s.projectAndOrgRole(r, projectID, metadata.RoleOwner)
+	_, org, m, err := s.projectAndOrgRole(r, projectID, metadata.RoleOwner)
 	if err != nil {
 		s.writeErr(w, err)
 		return
@@ -687,9 +694,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-
-	// Audit log (Phase 9.8 will wire a real sink; for now log via slog)
-	s.svc.Log.Info("project deleted", "org", org.ID, "project", projectID, "actor", userIDFromContext(r.Context()))
+	s.svc.AuditSink.Record(r.Context(), m.UserID, org.ID, projectID, "delete_project", "project", nil, nil)
 
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
