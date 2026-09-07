@@ -123,6 +123,11 @@ type SecretsProvider interface {
 	DecryptConnection(conn *metadata.Connection) (metadata.ConnectionSecret, error)
 	// EncryptConnection encrypts credential fields into the connection struct.
 	EncryptConnection(c *metadata.Connection, secret metadata.ConnectionSecret) error
+	// EncryptValue envelope-encrypts an arbitrary string (e.g. the SMTP
+	// password), returning ciphertext + key id for rotation-aware reads.
+	EncryptValue(plaintext string) (ciphertext []byte, keyID string, err error)
+	// DecryptValue reverses EncryptValue.
+	DecryptValue(ciphertext []byte, keyID string) (string, error)
 }
 
 // AdapterFactory builds a live adapter for a project connection. It is used by
@@ -261,6 +266,13 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.createFunction)))
 	mux.Handle("GET /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.getFunction)))
 	mux.Handle("DELETE /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.deleteFunction)))
+
+	// Platform mail settings (Phase 9.2, dashboard-managed BYOC SMTP).
+	// Owner-of-any-org gated; see requireAnyOrgOwner.
+	mux.Handle("GET /v1/admin/mail/settings", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.getMailSettings))))
+	mux.Handle("PUT /v1/admin/mail/settings", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.updateMailSettings))))
+	mux.Handle("POST /v1/admin/mail/test", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.testMailSend))))
+	mux.Handle("GET /v1/admin/mail/log", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.listMailLog))))
 
 	// Auto-generated REST API (API-key-authenticated, project scoped via key).
 	mux.Handle("GET /v1/api/tables", s.requireAPIKey(http.HandlerFunc(s.apiListTables)))

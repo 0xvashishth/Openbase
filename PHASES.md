@@ -457,9 +457,42 @@ IP, `expires_at`, `revoked_at`). Short-lived access token (15 min) + rotating re
 reuse detection. `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all`.
 Today a stolen JWT is valid for its full 24 h and deleting the user does not invalidate it.
 
-**9.2 — Mailer abstraction.** `internal/mail` with an SMTP sender, a dev/log sink, and templated
-HTML+text messages. There is currently no mail capability anywhere in the repo, which is why 9.3,
+**9.2 — Dashboard-managed mailer (BYOC SMTP).** `internal/mail` with a `Sender`
+interface, an SMTP sender (STARTTLS, PLAIN/LOGIN auth, dial + I/O timeouts), a
+dev/log sink, and templated HTML+text messages sharing one layout (verify-email,
+reset-password, org-invite now; magic-link/OTP templates arrive with Phase 10).
+There is currently no mail capability anywhere in the repo, which is why 9.3,
 9.7 and most of Phase 10 are blocked.
+
+The operator brings their own credentials in the dashboard — no env-var
+round-trip, no redeploy:
+
+- **Storage (migration `0005`):** `mail_settings` singleton (provider
+  `smtp|log`, host, port, username, envelope-encrypted password + key id,
+  from address/name) and `mail_log` (to, template, subject, ok, error,
+  created_at, 30-day retention). The SMTP password reuses the envelope
+  encryption from `ARCHITECTURE.md` §2.6 (generic encrypt/decrypt-value
+  methods on the secrets provider, rotation-aware like connections).
+- **Resolution:** a `MailService` resolves the effective sender per send —
+  configured SMTP, else the log sink (honest fallback: unconfigured
+  instances log instead of failing, and the UI says so). All mail flows
+  (9.3, 9.7, Phase 10) send through `MailService`, never SMTP directly.
+- **API (platform scope, `GET/PUT /v1/admin/mail/settings`,
+  `POST /v1/admin/mail/test`, `GET /v1/admin/mail/log`):** settings read
+  (password redacted — `***` unless unset), upsert with validation, test send
+  of a sample template to an arbitrary address with the delivery result
+  inline, and the log for debugging. Gated to org **owners** (any org — V1
+  simplification, documented: self-hosted instances have one operator; true
+  instance roles are a later concern).
+- **Dashboard:** PlatformSidebar gains an Email entry → `/settings/email`
+  page with provider select (SMTP/Log), credential fields, from address,
+  save, "Send test email" with inline result, delivery-log table, and the
+  honest unconfigured state.
+
+**Done when:** an operator pastes Mailgun/Gmail SMTP credentials into the
+dashboard, clicks "Send test email", receives it, sees the attempt in the
+log — and an unconfigured instance still signs users up (logging mail)
+instead of 500ing.
 
 **9.3 — Credential lifecycle.** Email verification, forgot/reset password (single-use tokens with
 expiry), change password (re-auth + revoke other sessions), change email (confirm both addresses).

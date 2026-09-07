@@ -1036,3 +1036,90 @@ func (s *Postgres) ListWebhookDeliveries(ctx context.Context, projectID string, 
 	}
 	return out, rows.Err()
 }
+
+// ---- Mail settings + log (Phase 9.2) ----
+
+// GetMailSettings returns the singleton mail_settings row. Migration 0005
+// seeds provider 'log', so this always finds a row on migrated databases.
+func (s *Postgres) GetMailSettings(ctx context.Context) (*MailSettings, error) {
+	var m MailSettings
+	err := s.pool.QueryRow(ctx, `
+		SELECT provider, smtp_host, smtp_port, smtp_username,
+		       encrypted_password, COALESCE(encryption_key_id, ''), from_address, from_name
+		FROM mail_settings WHERE id = 'default'`).Scan(
+		&m.Provider, &m.SMTPHost, &m.SMTPPort, &m.SMTPUsername,
+		&m.EncryptedPassword, &m.EncryptionKeyID, &m.FromAddress, &m.FromName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &MailSettings{Provider: "log", SMTPPort: 587, FromName: "Openbase"}, nil
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
+// UpdateMailSettings upserts the singleton row.
+func (s *Postgres) UpdateMailSettings(ctx context.Context, m *MailSettings) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mail_settings
+		    (id, provider, smtp_host, smtp_port, smtp_username,
+		     encrypted_password, encryption_key_id, from_address, from_name, updated_at)
+		VALUES ('default', $1,$2,$3,$4,$5,$6,$7,$8, now())
+		ON CONFLICT (id) DO UPDATE SET
+		    provider = EXCLUDED.provider, smtp_host = EXCLUDED.smtp_host,
+		    smtp_port = EXCLUDED.smtp_port, smtp_username = EXCLUDED.smtp_username,
+		    encrypted_password = EXCLUDED.encrypted_password,
+		    encryption_key_id = EXCLUDED.encryption_key_id,
+		    from_address = EXCLUDED.from_address, from_name = EXCLUDED.from_name,
+		    updated_at = now()`,
+		m.Provider, m.SMTPHost, m.SMTPPort, m.SMTPUsername,
+		m.EncryptedPassword, m.EncryptionKeyID, m.FromAddress, m.FromName)
+	return mapError(err)
+}
+
+// RecordMailLog persists one send attempt and enforces a 30-day retention
+// window.
+func (s *Postgres) RecordMailLog(ctx context.Context, e *MailLog) error {
+	if e.ID == "" {
+		e.ID = newID()
+	}
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = newTime()
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mail_log (id, to_address, template, subject, ok, error, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		e.ID, e.ToAddress, e.Template, e.Subject, e.OK, e.Error, e.CreatedAt)
+	if err != nil {
+		return mapError(err)
+	}
+	_, _ = s.pool.Exec(ctx, `DELETE FROM mail_log WHERE created_at < now() - interval '30 days'`)
+	return nil
+}
+
+// ListMailLog returns recent send attempts, newest first. Limit is clamped
+// to [1,200].
+func (s *Postgres) ListMailLog(ctx context.Context, limit int) ([]MailLog, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, to_address, template, subject, ok, error, created_at
+		FROM mail_log ORDER BY created_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []MailLog{}
+	for rows.Next() {
+		var e MailLog
+		if err := rows.Scan(&e.ID, &e.ToAddress, &e.Template, &e.Subject, &e.OK, &e.Error, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

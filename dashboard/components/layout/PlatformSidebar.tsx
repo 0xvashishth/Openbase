@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
-import { Building2, FolderKanban, Loader2 } from "lucide-react";
+import { Building2, FolderKanban, Loader2, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -216,6 +216,9 @@ export function PlatformSidebar({ currentPath, collapsed = false }: { currentPat
         </NavLink>
         <NavLink href="/projects" active={currentPath.startsWith("/projects")} icon={<FolderKanban className="h-3.5 w-3.5" />} collapsed={collapsed}>
           All projects
+        </NavLink>
+        <NavLink href="/settings/email" active={currentPath.startsWith("/settings/email")} icon={<Mail className="h-3.5 w-3.5" />} collapsed={collapsed}>
+          Email
         </NavLink>
       </NavSection>
     </SidebarShell>

@@ -18,6 +18,10 @@ import type {
   Trigger,
   TriggerActionType,
   TriggerEvent,
+  UpdateMailSettings,
+  MailLogEntry,
+  MailSettingsView,
+  TestMailResult,
   User,
   WebhookDelivery,
 } from "./types";
@@ -105,6 +109,22 @@ export const api = {
   login: (email: string, password: string) =>
     request<AuthResponse>("POST", "/v1/auth/login", { email, password }),
   me: (token: string) => request<User>("GET", "/v1/me", undefined, token),
+
+  // Platform mail settings (Phase 9.2, owner-gated). The SMTP password is
+  // write-only and never returned.
+  getMailSettings: (token: string) =>
+    request<MailSettingsView>("GET", "/v1/admin/mail/settings", undefined, token),
+  updateMailSettings: (token: string, body: UpdateMailSettings) =>
+    request<MailSettingsView>("PUT", "/v1/admin/mail/settings", body, token),
+  testMailSend: (token: string, to: string) =>
+    request<TestMailResult>("POST", "/v1/admin/mail/test", { to }, token),
+  listMailLog: (token: string, limit?: number) =>
+    request<MailLogEntry[]>(
+      "GET",
+      `/v1/admin/mail/log${limit ? `?limit=${limit}` : ""}`,
+      undefined,
+      token
+    ),
 
   // Organizations.
   listOrgs: (token: string) =>

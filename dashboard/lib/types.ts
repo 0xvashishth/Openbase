@@ -216,12 +216,52 @@ export interface WebhookDelivery {
 }
 
 export type FunctionRuntime = "node" | "python";
-
 export interface Function {
   id: string;
   project_id: string;
   name: string;
   runtime: FunctionRuntime;
   source: string;
+  created_at: string;
+}
+
+// Platform mail settings (Phase 9.2, dashboard-managed BYOC SMTP).
+// The password is write-only and never returned.
+export type MailProvider = "smtp" | "log";
+
+export interface MailSettingsView {
+  provider: MailProvider;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  password_set: boolean;
+  from_address: string;
+  from_name: string;
+}
+
+export interface UpdateMailSettings {
+  provider: MailProvider;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_username?: string;
+  /** Write-only: omit or empty to keep the stored secret. */
+  smtp_password?: string;
+  from_address?: string;
+  from_name?: string;
+}
+
+export interface TestMailResult {
+  ok: boolean;
+  provider: string;
+  error?: string;
+}
+
+export interface MailLogEntry {
+  id: string;
+  to_address: string;
+  template: string;
+  subject: string;
+  ok: boolean;
+  error?: string;
   created_at: string;
 }
