@@ -7,6 +7,7 @@ import type {
   Connection,
   FullSchema,
   Function,
+  Invite,
   Organization,
   OrgMember,
   OrgRole,
@@ -274,8 +275,22 @@ export const api = {
     request<{ role: OrgRole }>(
       "PATCH", `/v1/orgs/${orgId}/members/${userId}`, { role }, token
     ),
-removeMember: (token: string, orgId: string, userId: string) =>
+  removeMember: (token: string, orgId: string, userId: string) =>
     request<{ left: boolean }>("DELETE", `/v1/orgs/${orgId}/members/${userId}`, undefined, token),
+
+  // Invites (Phase 9.7).
+  listInvites: (token: string, orgId: string) =>
+    request<Invite[]>("GET", `/v1/orgs/${orgId}/invites`, undefined, token),
+  createInvite: (token: string, orgId: string, email: string, role: OrgRole) =>
+    request<Invite>("POST", `/v1/orgs/${orgId}/invites`, { email, role }, token),
+  revokeInvite: (token: string, orgId: string, inviteId: string) =>
+    request<{ status: string }>("DELETE", `/v1/orgs/${orgId}/invites/${inviteId}`, undefined, token),
+  acceptInvite: (token: string, inviteToken: string, password?: string, fullName?: string) =>
+    request<{ status: string; org_id: string }>("POST", `/v1/invites/accept`, {
+      token: inviteToken,
+      password,
+      full_name: fullName,
+    }, token),
 
   transferOwnership: (token: string, orgId: string, userId: string, demote?: boolean) => {
     return request<{ transferred_to: string; demote: boolean }>(

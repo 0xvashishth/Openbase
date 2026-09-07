@@ -33,6 +33,16 @@ export interface OrgMember {
   joined_at: string;
 }
 
+export interface Invite {
+  id: string;
+  email: string;
+  role: OrgRole;
+  invited_by: string;
+  expires_at: string;
+  accepted_at?: string;
+  created_at: string;
+}
+
 /**
  * Organization as returned by the API. `role` is the *caller's* role in this
  * org — the server folds it into every org-scoped payload (orgView) so the

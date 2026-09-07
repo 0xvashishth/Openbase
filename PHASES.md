@@ -523,6 +523,10 @@ and adding an existing account by email works. What remains is the part that nee
 email invites with an accept flow. Migration `0003` already ships
 `organization_invites (org_id, email, role, token_hash, invited_by, expires_at, accepted_at)`, so
 this is `POST /v1/orgs/{id}/invites` returning a one-time link plus
+
+> *Shipped:* `GET/POST /v1/orgs/{id}/invites`, `DELETE /v1/orgs/{id}/invites/{inviteID}`,
+> `POST /v1/invites/accept` (auto-creates user with name+password if needed); mail-driven via
+> `mail.TemplateOrgInvite`; `InvitesPanel` dashboard component; `/invite` accept page.
 `POST /v1/invites/{token}/accept` — usable out-of-band for self-hosters even before 9.2 lands, with
 mail becoming just another delivery channel for the same token.
 
