@@ -295,6 +295,7 @@ type Store interface {
 
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
+	ListAuditEvents(ctx context.Context, orgID string, limit int) ([]AuditEvent, error)
 }
 
 // WebhookDelivery records one webhook trigger delivery attempt for the

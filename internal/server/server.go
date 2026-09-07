@@ -197,9 +197,15 @@ func (h handler) Close() { h.srv.Close() }
 func New(svc *Services) Handler {
 	mux := http.NewServeMux()
 	// Default the audit sink rather than nil-checking at ~15 call sites; a
-	// missed check would be a nil dereference on a mutating request.
+	// missed check would be a nil dereference on a mutating request. Use the
+	// Postgres writer when a store is present (Phase 9.8); fall back to no-op
+	// when running with a non-persistent store (tests).
 	if svc.AuditSink == nil {
-		svc.AuditSink = &NoopAuditSink{}
+		if svc.Store != nil {
+			svc.AuditSink = &PostgresAuditSink{Store: svc.Store, Log: svc.Log}
+		} else {
+			svc.AuditSink = &NoopAuditSink{}
+		}
 	}
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 	s.adapters = s.newAdapterPool()
@@ -236,6 +242,7 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/orgs/{orgID}/invites", s.requireAuth(http.HandlerFunc(s.createInvite)))
 	mux.Handle("DELETE /v1/orgs/{orgID}/invites/{inviteID}", s.requireAuth(http.HandlerFunc(s.revokeInvite)))
 	mux.Handle("POST /v1/invites/accept", s.limitAuth(http.HandlerFunc(s.acceptInvite)))
+	mux.Handle("GET /v1/orgs/{orgID}/audit", s.requireAuth(http.HandlerFunc(s.listAuditEvents)))
 	mux.Handle("POST /v1/orgs/{orgID}/transfer-ownership", s.requireAuth(http.HandlerFunc(s.transferOwnership)))
 	mux.Handle("POST /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.createProject)))
 	mux.Handle("GET /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.listProjects)))

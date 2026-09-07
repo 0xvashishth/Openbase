@@ -535,6 +535,11 @@ for login, key mint/revoke, connection change, **every raw SQL execution**, DDL,
 project delete. `GET /v1/orgs/{id}/audit` + a filterable UI. Nothing today records that a member ran
 `DROP TABLE` through the SQL editor.
 
+> *Shipped (partial):* `PostgresAuditSink` wired in place of `NoopAuditSink` when a store is
+> present; `GET /v1/orgs/{id}/audit` (admin+, `?limit=`); `ListAuditEvents` metadata method.
+> *Remaining:* instrument every mutating handler to call `AuditSink.Record`; filterable dashboard
+> UI; ingest IP/UA from request context.
+
 *Seam already in place from 8.6:* `server.AuditSink` is an interface on `Services` with a no-op
 default, and every org/project mutation already calls `Record(actor, org, project, action, target,
 metadata)`. Migration `0003` creates the `audit_events` table. This phase is now a writer

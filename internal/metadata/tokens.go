@@ -82,3 +82,32 @@ func (s *Postgres) UpdateUserProfile(ctx context.Context, userID, fullName strin
 		userID, fullName)
 	return mapError(err)
 }
+
+// ListAuditEvents returns recent audit events for an org, newest first.
+// limit is clamped to [1, 200].
+func (s *Postgres) ListAuditEvents(ctx context.Context, orgID string, limit int) ([]AuditEvent, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, actor_user_id, organization_id, project_id, action, target_type, target_id, metadata, ip, user_agent, created_at
+		FROM audit_events
+		WHERE organization_id = $1
+		ORDER BY created_at DESC LIMIT $2`, orgID, limit)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	out := []AuditEvent{}
+	for rows.Next() {
+		var e AuditEvent
+		if err := rows.Scan(&e.ID, &e.ActorUserID, &e.OrganizationID, &e.ProjectID, &e.Action, &e.TargetType, &e.TargetID, &e.Metadata, &e.IP, &e.UserAgent, &e.CreatedAt); err != nil {
+			return nil, mapError(err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
