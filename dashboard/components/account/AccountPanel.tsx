@@ -44,8 +44,11 @@ function AccountPanelInner() {
     if (!token) return;
     try {
       const updated: User = await api.updateMe(token, { full_name: fullName });
+      // Refresh user data from server so the UI reflects the persisted state
+      // immediately (rather than waiting for the next auth context refresh).
+      const fresh = await api.me(token);
+      setFullName(fresh.full_name ?? "");
       toast.success("Profile updated");
-      setFullName(updated.full_name ?? "");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     }
