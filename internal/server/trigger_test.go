@@ -135,3 +135,26 @@ func TestTriggerCreateRequiresTarget(t *testing.T) {
 		t.Fatalf("missing target status = %d, want 400 body=%v", resp.StatusCode, js)
 	}
 }
+
+// TestTriggerCreateRejectsSSRFTarget proves fail-fast SSRF validation: with
+// the production default (no private-webhook escape hatch), a webhook trigger
+// pointing at cloud metadata / loopback is refused at creation with a 400
+// instead of silently never delivering.
+func TestTriggerCreateRejectsSSRFTarget(t *testing.T) {
+	ts := newTestServer(t)
+	ts.svc.AllowPrivateWebhooks = false
+	tok, _, pID := ts.newProject(t)
+	for _, target := range []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"http://127.0.0.1:8080/hook",
+		"http://10.0.0.5/hook",
+	} {
+		resp, js := ts.do(t, "POST", "/v1/projects/"+pID+"/triggers", tok, map[string]string{
+			"name": "x", "collection": "users", "event": "insert",
+			"action_type": "webhook", "action_target": target,
+		})
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("SSRF target %q status = %d, want 400 body=%v", target, resp.StatusCode, js)
+		}
+	}
+}

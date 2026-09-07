@@ -14,7 +14,8 @@ import { StatusBadge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import { SegmentedOption } from "@/components/ui/segmented";
-import type { Function, Trigger, TriggerActionType, TriggerEvent } from "@/lib/types";
+import { useToast } from "@/components/ui/toast";
+import type { Function, Trigger, TriggerActionType, TriggerEvent, WebhookDelivery } from "@/lib/types";
 
 const EVENTS: { value: TriggerEvent; label: string }[] = [
   { value: "insert", label: "Insert" },
@@ -23,11 +24,14 @@ const EVENTS: { value: TriggerEvent; label: string }[] = [
 ];
 
 export function TriggersPanel({ projectId }: { projectId: string }) {
+  const toast = useToast();
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [functions, setFunctions] = useState<Function[]>([]);
   const [collections, setCollections] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
+  const [deliveryFilter, setDeliveryFilter] = useState("");
 
   const [name, setName] = useState("");
   const [collection, setCollection] = useState("");
@@ -44,12 +48,14 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
     const token = authToken();
     if (!token) return;
     try {
-      const [trigs, fns] = await Promise.all([
+      const [trigs, fns, dlv] = await Promise.all([
         api.listTriggers(token, projectId),
         api.listFunctions(token, projectId),
+        api.listDeliveries(token, projectId, undefined, 50).catch(() => [] as WebhookDelivery[]),
       ]);
       setTriggers(trigs);
       setFunctions(fns);
+      setDeliveries(dlv);
       try {
         const cols = await api.listCollections(token, projectId);
         setCollections(cols.map((c) => c.name));
@@ -90,6 +96,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
       setCollection("");
       setCustomCollection("");
       setTarget("");
+      toast.success("Trigger created", `${name.trim()} will fire on ${event} on ${col}.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trigger");
@@ -105,6 +112,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
       await api.updateTrigger(token, projectId, t.id, { enabled: !t.enabled });
+      toast.success(t.enabled ? "Trigger disabled" : "Trigger enabled", t.name);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update trigger");
@@ -123,6 +131,7 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
       if (!token) throw new Error("Not authenticated");
       await api.deleteTrigger(token, projectId, t.id);
       setPendingDelete(null);
+      toast.success("Trigger deleted", t.name);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete trigger");
@@ -296,6 +305,88 @@ export function TriggersPanel({ projectId }: { projectId: string }) {
         loading={deleting !== null}
         onConfirm={remove}
       />
+
+      <section>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h2 className="text-caption font-w510 text-foreground-strong">Delivery log</h2>
+          {triggers.length > 0 && (
+            <select
+              aria-label="Filter deliveries by trigger"
+              value={deliveryFilter}
+              onChange={(e) => setDeliveryFilter(e.target.value)}
+              className="h-8 rounded-md border border-input bg-foreground/[0.02] px-2.5 text-caption text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+            >
+              <option value="">All triggers</option>
+              {triggers
+                .filter((t) => t.action_type === "webhook")
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+            </select>
+          )}
+          <Button variant="ghost" onClick={() => void load()}>
+            Refresh
+          </Button>
+        </div>
+        <p className="mb-3 max-w-3xl text-label text-muted-foreground">
+          Every webhook delivery is signed with your project&apos;s secret — verify the{" "}
+          <span className="font-mono">X-Openbase-Signature: sha256=…</span> header
+          (HMAC-SHA256 of the raw body) on receipt.
+        </p>
+        {(() => {
+          const shown = deliveryFilter
+            ? deliveries.filter((d) => d.trigger_id === deliveryFilter)
+            : deliveries;
+          if (shown.length === 0) {
+            return (
+              <EmptyState
+                title="No deliveries yet"
+                hint="Fire a trigger (insert a row on a watched table) and its webhook attempts will appear here with status, latency and errors."
+              />
+            );
+          }
+          const triggerName = (id?: string) =>
+            triggers.find((t) => t.id === id)?.name ?? id?.slice(0, 8) ?? "—";
+          return (
+            <div className="max-w-3xl space-y-2">
+              {shown.map((d) => (
+                <div
+                  key={d.id}
+                  className="rounded-lg border border-border bg-card px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    {d.ok ? (
+                      <StatusBadge tone="success">{d.status_code ?? "delivered"}</StatusBadge>
+                    ) : (
+                      <StatusBadge tone="destructive">
+                        {d.status_code ?? "failed"}
+                      </StatusBadge>
+                    )}
+                    <span className="truncate text-caption font-w510 text-foreground-strong">
+                      {triggerName(d.trigger_id)}
+                    </span>
+                    <span className="text-label text-muted-foreground">
+                      {d.event} on <span className="font-mono">{d.collection}</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-label text-muted-foreground">
+                    <span className="font-mono">{d.target_url}</span>
+                    <span>
+                      {d.attempts} {d.attempts === 1 ? "attempt" : "attempts"} ·{" "}
+                      {d.duration_ms}ms · {new Date(d.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {!d.ok && d.error && (
+                    <div className="mt-1 font-mono text-label text-destructive">{d.error}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </section>
     </div>
   );
 }

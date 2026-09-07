@@ -19,6 +19,7 @@ import type {
   TriggerActionType,
   TriggerEvent,
   User,
+  WebhookDelivery,
 } from "./types";
 
 // Base URL of the Openbase API. Configure via NEXT_PUBLIC_OPENBASE_API_URL
@@ -91,6 +92,9 @@ async function request<T>(
 }
 
 export const api = {
+  // Operability probes (unauthenticated by design).
+  health: () => request<{ status: string }>("GET", "/healthz"),
+
   // Auth.
   register: (email: string, password: string, fullName?: string) =>
     request<AuthResponse>("POST", "/v1/auth/register", {
@@ -189,6 +193,18 @@ export const api = {
   ) => request<Trigger>("PUT", `/v1/projects/${projectId}/triggers/${triggerId}`, body, token),
   deleteTrigger: (token: string, projectId: string, triggerId: string) =>
     request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/triggers/${triggerId}`, undefined, token),
+  listDeliveries: (token: string, projectId: string, triggerId?: string, limit?: number) => {
+    const q = new URLSearchParams();
+    if (triggerId) q.set("trigger_id", triggerId);
+    if (limit) q.set("limit", String(limit));
+    const qs = q.toString();
+    return request<WebhookDelivery[]>(
+      "GET",
+      `/v1/projects/${projectId}/triggers/deliveries${qs ? `?${qs}` : ""}`,
+      undefined,
+      token
+    );
+  },
 
   // Functions.
   listFunctions: (token: string, projectId: string) =>

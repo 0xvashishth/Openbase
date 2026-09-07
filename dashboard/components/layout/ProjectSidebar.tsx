@@ -18,7 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NavLink, NavSection } from "./PlatformSidebar";
-import { normalizeTool, projectToolPath } from "./nav";
+import { normalizeTool, PROJECT_TOOL_META, projectToolPath, type ProjectToolSection } from "./nav";
 
 export interface ProjectSidebarProps {
   orgId: string;
@@ -87,6 +87,33 @@ export function ProjectSidebar({
   const noTriggers = supportsTriggers === false ? "Engine has no native trigger support" : undefined;
   const noRealtime = supportsRealtime === false ? "Engine has no native realtime support" : undefined;
 
+  // Icons are presentation and stay local; slugs/labels/sections/aliases come
+  // from nav.ts PROJECT_TOOL_META (single source of truth).
+  const ICONS: Record<string, React.ReactNode> = {
+    overview: <Home className="h-3.5 w-3.5" />,
+    tables: <Table2 className="h-3.5 w-3.5" />,
+    schema: <Network className="h-3.5 w-3.5" />,
+    sql: <SquareTerminal className="h-3.5 w-3.5" />,
+    connect: <Cable className="h-3.5 w-3.5" />,
+    api: <KeyRound className="h-3.5 w-3.5" />,
+    functions: <Zap className="h-3.5 w-3.5" />,
+    triggers: <Database className="h-3.5 w-3.5" />,
+    realtime: <Radio className="h-3.5 w-3.5" />,
+    "db-source": <Plug className="h-3.5 w-3.5" />,
+    settings: <Settings className="h-3.5 w-3.5" />,
+  };
+  // Tools that need a connected database; triggers/realtime additionally
+  // need native engine support (capability locks).
+  const NEEDS_CONNECTION = new Set(["tables", "schema", "sql", "functions", "triggers", "realtime"]);
+  const SECTIONS: ProjectToolSection[] = ["Project", "Database", "Backend", "Configure"];
+
+  const lockFor = (slug: string): { disabled: boolean; reason?: string } => {
+    if (NEEDS_CONNECTION.has(slug) && locked) return { disabled: true, reason: lockReason };
+    if (slug === "triggers" && supportsTriggers === false) return { disabled: true, reason: noTriggers };
+    if (slug === "realtime" && supportsRealtime === false) return { disabled: true, reason: noRealtime };
+    return { disabled: false };
+  };
+
   return (
     <div className="flex h-full flex-col">
       <nav
@@ -124,89 +151,26 @@ export function ProjectSidebar({
             </Link>
           )}
         </div>
-        <NavSection label="Project" collapsed={collapsed}>
-          <NavLink href={href("overview")} active={isActive("overview")} icon={<Home className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            Overview
-          </NavLink>
-        </NavSection>
-        <NavSection label="Database" collapsed={collapsed}>
-          <NavLink
-            href={href("tables")}
-            active={isActive("tables", ["data"])}
-            icon={<Table2 className="h-3.5 w-3.5" />}
-            disabled={locked}
-            disabledReason={lockReason}
-            collapsed={collapsed}
-          >
-            Tables
-          </NavLink>
-          <NavLink
-            href={href("schema")}
-            active={isActive("schema")}
-            icon={<Network className="h-3.5 w-3.5" />}
-            disabled={locked}
-            disabledReason={lockReason}
-            collapsed={collapsed}
-          >
-            Schema
-          </NavLink>
-          <NavLink
-            href={href("sql")}
-            active={isActive("sql")}
-            icon={<SquareTerminal className="h-3.5 w-3.5" />}
-            disabled={locked}
-            disabledReason={lockReason}
-            collapsed={collapsed}
-          >
-            SQL Editor
-          </NavLink>
-        </NavSection>
-        <NavSection label="Backend" collapsed={collapsed}>
-          <NavLink href={href("connect")} active={isActive("connect")} icon={<Cable className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            Connect
-          </NavLink>
-          <NavLink href={href("api")} active={isActive("api", ["api-keys"])} icon={<KeyRound className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            API Keys
-          </NavLink>
-          <NavLink
-            href={href("functions")}
-            active={isActive("functions")}
-            icon={<Zap className="h-3.5 w-3.5" />}
-            disabled={locked}
-            disabledReason={lockReason}
-            collapsed={collapsed}
-          >
-            Functions
-          </NavLink>
-          <NavLink
-            href={href("triggers")}
-            active={isActive("triggers")}
-            icon={<Database className="h-3.5 w-3.5" />}
-            disabled={locked || supportsTriggers === false}
-            disabledReason={locked ? lockReason : noTriggers}
-            collapsed={collapsed}
-          >
-            Triggers
-          </NavLink>
-          <NavLink
-            href={href("realtime")}
-            active={isActive("realtime")}
-            icon={<Radio className="h-3.5 w-3.5" />}
-            disabled={locked || supportsRealtime === false}
-            disabledReason={locked ? lockReason : noRealtime}
-            collapsed={collapsed}
-          >
-            Realtime
-          </NavLink>
-        </NavSection>
-        <NavSection label="Configure" collapsed={collapsed}>
-          <NavLink href={href("db-source")} active={isActive("db-source", ["connection"])} icon={<Plug className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            DB Source
-          </NavLink>
-          <NavLink href={href("settings")} active={isActive("settings")} icon={<Settings className="h-3.5 w-3.5" />} collapsed={collapsed}>
-            Settings
-          </NavLink>
-        </NavSection>
+        {SECTIONS.map((section) => (
+          <NavSection key={section} label={section} collapsed={collapsed}>
+            {PROJECT_TOOL_META.filter((t) => t.section === section).map((t) => {
+              const lock = lockFor(t.slug);
+              return (
+                <NavLink
+                  key={t.slug}
+                  href={href(t.slug)}
+                  active={isActive(t.slug, t.aliases ?? [])}
+                  icon={ICONS[t.slug]}
+                  disabled={lock.disabled}
+                  disabledReason={lock.reason}
+                  collapsed={collapsed}
+                >
+                  {t.label}
+                </NavLink>
+              );
+            })}
+          </NavSection>
+        ))}
       </nav>
     </div>
   );

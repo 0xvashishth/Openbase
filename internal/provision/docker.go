@@ -49,12 +49,20 @@ func randomHex(n int) string {
 
 // Compose is a Docker-backed ProvisionerInterface. It runs each instance as a
 // dedicated container (or a small group, in FerretDB's case) published on a
-// free host port, which mirrors how a real host-based platform would hand out
-// per-project instances.
+// free host port, with a named volume for data persistence.
 type Compose struct {
 	// Registry is a pass-through host registry for containers (e.g. leave empty
 	// for the Docker CLI which talks to the local daemon).
 	Registry string
+	// VolumePrefix is the prefix for named Docker volumes (e.g. "openbase_").
+	VolumePrefix string
+}
+
+// NewCompose creates a Docker-backed provisioner with volume persistence.
+func NewCompose(volumePrefix string) *Compose {
+	return &Compose{
+		VolumePrefix: volumePrefix,
+	}
 }
 
 // Provision starts a dedicated database instance for engine and returns its
@@ -88,6 +96,13 @@ func (p *Compose) provisionPostgres(ctx context.Context) (Instance, error) {
 	}
 
 	name := "openbase-provisioned-" + randomHex(6)
+	volName := p.volumeName(name)
+
+	// Create named volume for persistent data
+	if err := p.createVolume(ctx, volName); err != nil {
+		return Instance{}, fmt.Errorf("creating volume %s: %w", volName, err)
+	}
+
 	args := []string{
 		"run", "-d",
 		"--name", name,
@@ -95,19 +110,19 @@ func (p *Compose) provisionPostgres(ctx context.Context) (Instance, error) {
 		"-e", "POSTGRES_USER=" + user,
 		"-e", "POSTGRES_PASSWORD=" + password,
 		"-e", "POSTGRES_DB=" + db,
+		"-v", volName + ":/var/lib/postgresql/data",
 		"postgres:16-alpine",
 	}
 	out, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
 	if err != nil {
-		// Failure path: nothing was ever handed to a user, so -v is
-		// unambiguous here — the anonymous data volume the image declares is
-		// pure garbage. (Destroy() deliberately does NOT pass -v; see there.)
-		_ = exec.CommandContext(ctx, "docker", "rm", "-f", "-v", name).Run()
+		// Clean up the named volume on failure
+		_ = p.removeVolume(ctx, volName)
+		_ = exec.CommandContext(ctx, "docker", "rm", "-f", name).Run()
 		return Instance{}, fmt.Errorf("starting provisioned container: %w: %s", err, out)
 	}
 
 	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", user, password, port, db)
-	instance := Instance{ContainerID: name, Engine: EnginePostgres, ConnString: dsn}
+	instance := Instance{ContainerID: name, Engine: EnginePostgres, ConnString: dsn, Volume: volName}
 
 	if err := p.waitPostgresReady(ctx, dsn); err != nil {
 		_ = p.Destroy(ctx, name)
@@ -127,6 +142,9 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 	pgName := base + "-pg"
 	fName := base + "-ferret"
 
+	pgVol := p.volumeName(pgName)
+	fVol := p.volumeName(fName)
+
 	port, err := freePort()
 	if err != nil {
 		return Instance{}, fmt.Errorf("reserving host port: %w", err)
@@ -138,13 +156,24 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 	}
 
 	cleanup := func() {
-		// Rollback of a half-built group: no user data can exist yet, so the
-		// anonymous volumes go with it.
-		_, _ = docker("rm", "-f", "-v", fName, pgName)
+		_, _ = docker("rm", "-f", fName, pgName)
 		_, _ = docker("network", "rm", netName)
+		_ = p.removeVolume(ctx, pgVol)
+		_ = p.removeVolume(ctx, fVol)
+	}
+
+	// Create named volumes for persistent data
+	if err := p.createVolume(ctx, pgVol); err != nil {
+		return Instance{}, fmt.Errorf("creating volume %s: %w", pgVol, err)
+	}
+	if err := p.createVolume(ctx, fVol); err != nil {
+		_ = p.removeVolume(ctx, pgVol)
+		return Instance{}, fmt.Errorf("creating volume %s: %w", fVol, err)
 	}
 
 	if _, err := docker("network", "create", netName); err != nil {
+		_ = p.removeVolume(ctx, pgVol)
+		_ = p.removeVolume(ctx, fVol)
 		return Instance{}, fmt.Errorf("creating network %s: %s", netName, err)
 	}
 
@@ -155,6 +184,7 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 		"-e", "POSTGRES_USER="+user,
 		"-e", "POSTGRES_PASSWORD="+password,
 		"-e", "POSTGRES_DB=postgres",
+		"-v", pgVol+":/var/lib/postgresql/data",
 		"ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0",
 	); err != nil {
 		cleanup()
@@ -167,6 +197,7 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 		"-p", itoa(port)+":27017",
 		"-e", "FERRETDB_POSTGRESQL_URL=postgres://"+user+":"+password+"@"+pgName+":5432/postgres",
 		"-e", "FERRETDB_AUTH=false",
+		"-v", fVol+":/var/lib/ferretdb",
 		"ghcr.io/ferretdb/ferretdb:2.7.0",
 	); err != nil {
 		cleanup()
@@ -178,6 +209,7 @@ func (p *Compose) provisionFerretDB(ctx context.Context) (Instance, error) {
 		ContainerID: ferretPrefix + base,
 		Engine:      EngineFerretDB,
 		ConnString:  dsn,
+		Volume:      pgVol + "," + fVol,
 	}
 
 	if err := p.waitFerretReady(ctx, dsn); err != nil {
@@ -237,16 +269,41 @@ func (p *Compose) waitFerretReady(ctx context.Context, dsn string) error {
 	return errors.New("timed out waiting for ferretdb readiness")
 }
 
+// volumeName generates a stable named volume name for a container.
+func (p *Compose) volumeName(containerID string) string {
+	if p.VolumePrefix == "" {
+		return "openbase_" + containerID
+	}
+	return p.VolumePrefix + containerID
+}
+
+// createVolume creates a named Docker volume.
+func (p *Compose) createVolume(ctx context.Context, volName string) error {
+	out, err := exec.CommandContext(ctx, "docker", "volume", "create", volName).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("creating volume %s: %w: %s", volName, err, out)
+	}
+	return nil
+}
+
+// removeVolume removes a named Docker volume.
+func (p *Compose) removeVolume(ctx context.Context, volName string) error {
+	out, err := exec.CommandContext(ctx, "docker", "volume", "rm", volName).CombinedOutput()
+	if err != nil {
+		// Ignore "volume not found" errors
+		if strings.Contains(string(out), "No such volume") {
+			return nil
+		}
+		return fmt.Errorf("removing volume %s: %w: %s", volName, err, out)
+	}
+	return nil
+}
+
 // Destroy stops and removes a provisioned instance. It understands the grouped
 // FerretDB identifier and tears down the whole resource group.
 //
-// Deliberately WITHOUT `-v`: these containers hold the customer's actual
-// application data. Leaving the anonymous volume behind means an accidental
-// disconnect is recoverable by an operator (`docker volume ls`) instead of
-// being instant, silent data loss. PHASES.md 18.1 tracks moving provisioned
-// data onto named, explicitly-managed volumes; until then, orphaned volumes are
-// the deliberately safer failure mode. Test harnesses that create throwaway
-// containers do pass -v (see internal/testutil).
+// Named volumes are removed along with containers to prevent orphaned volumes
+// from accumulating. The volume names are derived from the container IDs.
 func (p *Compose) Destroy(ctx context.Context, containerID string) error {
 	if containerID == "" {
 		return nil
@@ -254,7 +311,12 @@ func (p *Compose) Destroy(ctx context.Context, containerID string) error {
 
 	if strings.HasPrefix(containerID, ferretPrefix) {
 		base := strings.TrimPrefix(containerID, ferretPrefix)
-		out, err := exec.CommandContext(ctx, "docker", "rm", "-f", base+"-ferret", base+"-pg").CombinedOutput()
+		pgName := base + "-pg"
+		fName := base + "-ferret"
+		pgVol := p.volumeName(pgName)
+		fVol := p.volumeName(fName)
+
+		out, err := exec.CommandContext(ctx, "docker", "rm", "-f", fName, pgName).CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "No such container") {
 			return fmt.Errorf("removing provisioned ferretdb group %s: %w: %s", base, err, out)
 		}
@@ -262,6 +324,9 @@ func (p *Compose) Destroy(ctx context.Context, containerID string) error {
 			!strings.Contains(string(out2), "No such network") {
 			return fmt.Errorf("removing provisioned network %s-net: %w: %s", base, err2, out2)
 		}
+		// Remove named volumes
+		_ = p.removeVolume(ctx, pgVol)
+		_ = p.removeVolume(ctx, fVol)
 		return nil
 	}
 
@@ -273,6 +338,9 @@ func (p *Compose) Destroy(ctx context.Context, containerID string) error {
 		}
 		return fmt.Errorf("removing provisioned container %s: %w: %s", containerID, err, out)
 	}
+	// Remove named volume
+	volName := p.volumeName(containerID)
+	_ = p.removeVolume(ctx, volName)
 	return nil
 }
 

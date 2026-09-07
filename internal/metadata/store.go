@@ -266,8 +266,32 @@ type Store interface {
 	ListFunctions(ctx context.Context, projectID string) ([]Function, error)
 	DeleteFunction(ctx context.Context, projectID, id string) error
 
+	// Webhook deliveries (Phase 8.9 hardening).
+	// GetOrCreateWebhookSecret returns the project's HMAC signing secret,
+	// generating and persisting one on first use.
+	GetOrCreateWebhookSecret(ctx context.Context, projectID string) (string, error)
+	RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
+	ListWebhookDeliveries(ctx context.Context, projectID string, triggerID string, limit int) ([]WebhookDelivery, error)
+
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
+}
+
+// WebhookDelivery records one webhook trigger delivery attempt for the
+// Triggers UI log.
+type WebhookDelivery struct {
+	ID         string    `json:"id"`
+	ProjectID  string    `json:"project_id"`
+	TriggerID  string    `json:"trigger_id,omitempty"`
+	TargetURL  string    `json:"target_url"`
+	Collection string    `json:"collection"`
+	Event      string    `json:"event"`
+	Attempts   int       `json:"attempts"`
+	StatusCode *int      `json:"status_code"`
+	OK         bool      `json:"ok"`
+	Error      string    `json:"error,omitempty"`
+	DurationMs int64     `json:"duration_ms"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // AuditEvent represents a single audit log entry.

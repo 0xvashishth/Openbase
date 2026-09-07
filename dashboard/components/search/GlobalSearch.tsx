@@ -22,8 +22,8 @@ import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PROJECT_TOOL_META, parseRoute } from "@/components/layout/nav";
 import { Spinner } from "@/components/ui/feedback";
-import { parseRoute } from "@/components/layout/nav";
 import { cn } from "@/lib/utils";
 
 interface SearchItem {
@@ -35,18 +35,28 @@ interface SearchItem {
   icon: React.ReactNode;
 }
 
-const PROJECT_TOOLS: { slug: string; label: string; icon: React.ReactNode }[] = [
-  { slug: "tables", label: "Tables", icon: <Table2 className="h-4 w-4" /> },
-  { slug: "schema", label: "Schema", icon: <Network className="h-4 w-4" /> },
-  { slug: "sql", label: "SQL Editor", icon: <SquareTerminal className="h-4 w-4" /> },
-  { slug: "api", label: "API Keys", icon: <KeyRound className="h-4 w-4" /> },
-  { slug: "functions", label: "Functions", icon: <Zap className="h-4 w-4" /> },
-  { slug: "triggers", label: "Triggers", icon: <Database className="h-4 w-4" /> },
-  { slug: "realtime", label: "Realtime", icon: <Radio className="h-4 w-4" /> },
-  { slug: "connect", label: "Connect", icon: <Cable className="h-4 w-4" /> },
-  { slug: "db-source", label: "DB Source", icon: <Plug className="h-4 w-4" /> },
-  { slug: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
-];
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  tables: <Table2 className="h-4 w-4" />,
+  schema: <Network className="h-4 w-4" />,
+  sql: <SquareTerminal className="h-4 w-4" />,
+  api: <KeyRound className="h-4 w-4" />,
+  functions: <Zap className="h-4 w-4" />,
+  triggers: <Database className="h-4 w-4" />,
+  realtime: <Radio className="h-4 w-4" />,
+  connect: <Cable className="h-4 w-4" />,
+  "db-source": <Plug className="h-4 w-4" />,
+  settings: <Settings className="h-4 w-4" />,
+};
+
+const PROJECT_TOOLS: { slug: string; label: string; icon: React.ReactNode }[] =
+  // Slugs + labels derive from nav.ts (single source of truth); icons stay
+  // local because they are presentation. "overview" is excluded — ⌘K offers
+  // destinations, and the overview tile grid already covers home.
+  PROJECT_TOOL_META.filter((t) => t.slug !== "overview").map((t) => ({
+    slug: t.slug,
+    label: t.label,
+    icon: TOOL_ICONS[t.slug] ?? <Table2 className="h-4 w-4" />,
+  }));
 
 const PER_GROUP = 6;
 
@@ -88,7 +98,7 @@ export function GlobalSearch() {
       if (route.scope === "project" && route.orgId && route.projectId) {
         const base = `/orgs/${route.orgId}/projects/${route.projectId}`;
         for (const t of PROJECT_TOOLS) {
-          found.push({ id: `tool-${t.slug}`, group: "Tools", label: t.label, hint: "Current project", href: `${base}/${t.slug === "overview" ? "" : t.slug}`, icon: t.icon });
+          found.push({ id: `tool-${t.slug}`, group: "Tools", label: t.label, hint: "Current project", href: `${base}/${t.slug}`, icon: t.icon });
         }
         try {
           const cols = await api.listCollections(token, route.projectId);

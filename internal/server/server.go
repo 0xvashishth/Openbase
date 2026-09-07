@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/auth"
@@ -70,9 +69,26 @@ type Services struct {
 	// not delivered to actions.
 	TriggerService TriggerRuntime
 
+	// AllowPrivateWebhooks disables the SSRF guard on webhook trigger
+	// destinations (for tests and self-hosters targeting LAN URLs). Production
+	// default is false. Mirrors triggers.EndpointAction.AllowPrivate.
+	AllowPrivateWebhooks bool
+
 	// RealtimeHub is the Phase 5 WebSocket gateway. If nil, the realtime
 	// endpoint returns 503.
 	RealtimeHub *realtime.Hub
+
+	// Operability knobs (Phase 8.7). Zero values select safe defaults, so
+	// every existing Services literal keeps working unchanged.
+	// AuthRateLimitPerMin caps /v1/auth/* requests per client IP per minute
+	// (default 60).
+	AuthRateLimitPerMin int
+	// AuthLockoutThreshold locks an IP out for 10 minutes after this many
+	// failed auth attempts (default 10).
+	AuthLockoutThreshold int
+	// APIKeyQuotaPerMin caps data-plane requests per API key per minute
+	// (default 1000).
+	APIKeyQuotaPerMin int
 }
 
 // TriggerRuntime re-registers a project's DB triggers and starts change
@@ -148,6 +164,11 @@ type Server struct {
 	// adapters holds one live adapter per project connection instead of
 	// dialing and tearing down a pool on every request (see adapter_pool.go).
 	adapters *pool.Pool[adapterKey, Adapter]
+
+	// metricsReg + rates hold operability state (Phase 8.7). Per-Server so
+	// tests never share counters or limiter buckets; lazily initialized.
+	metricsReg *metricsRegistry
+	rates      *rateState
 }
 
 // Handler is the http.Handler returned by New, extended with the shutdown hook
@@ -178,8 +199,16 @@ func New(svc *Services) Handler {
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 	s.adapters = s.newAdapterPool()
 
-	mux.HandleFunc("POST /v1/auth/register", s.register)
-	mux.HandleFunc("POST /v1/auth/login", s.login)
+	// Auth endpoints sit behind per-IP rate limiting with lockout after N
+	// failures (Phase 8.7) — they are the brute-force surface.
+	mux.Handle("POST /v1/auth/register", s.limitAuth(http.HandlerFunc(s.register)))
+	mux.Handle("POST /v1/auth/login", s.limitAuth(http.HandlerFunc(s.login)))
+
+	// Operability probes (unauthenticated by design: load balancers and
+	// container healthchecks cannot present credentials).
+	mux.HandleFunc("GET /healthz", s.healthz)
+	mux.HandleFunc("GET /readyz", s.readyz)
+	mux.HandleFunc("GET /metrics", s.metrics)
 
 	mux.Handle("GET /v1/me", s.requireAuth(http.HandlerFunc(s.me)))
 
@@ -226,6 +255,7 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/projects/{projectID}/triggers", s.requireAuth(http.HandlerFunc(s.createTrigger)))
 	mux.Handle("PUT /v1/projects/{projectID}/triggers/{triggerID}", s.requireAuth(http.HandlerFunc(s.updateTrigger)))
 	mux.Handle("DELETE /v1/projects/{projectID}/triggers/{triggerID}", s.requireAuth(http.HandlerFunc(s.deleteTrigger)))
+	mux.Handle("GET /v1/projects/{projectID}/triggers/deliveries", s.requireAuth(http.HandlerFunc(s.listDeliveries)))
 
 	mux.Handle("GET /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.listFunctions)))
 	mux.Handle("POST /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.createFunction)))
@@ -244,19 +274,7 @@ func New(svc *Services) Handler {
 	mux.Handle("GET /v1/realtime", s.requireAPIKey(http.HandlerFunc(s.realtimeWS)))
 
 	cors := &CORS{AllowedOrigins: svc.AllowedOrigins}
-	return handler{Handler: s.withRecovery(s.withLogging(cors.Middleware(mux))), srv: s}
-}
-
-func (s *Server) withLogging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		s.svc.Log.Info("http",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start).String(),
-		)
-	})
+	return handler{Handler: s.withRecovery(s.withRequestID(cors.Middleware(mux))), srv: s}
 }
 
 func (s *Server) withRecovery(next http.Handler) http.Handler {

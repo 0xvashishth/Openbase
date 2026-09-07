@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +31,30 @@ var _ Store = (*Postgres)(nil)
 // NewPostgres returns a metadata store using the given pool.
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
+}
+
+// Ping verifies the metadata database is reachable. Used by GET /readyz.
+func (s *Postgres) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
+// AppliedMigrations returns the versions recorded in schema_migrations.
+// Used by GET /readyz to detect a running API whose schema lags the binary.
+func (s *Postgres) AppliedMigrations(ctx context.Context) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT version FROM schema_migrations ORDER BY version`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 func newID() string { return uuid.NewString() }
@@ -906,4 +932,107 @@ func (s *Postgres) AppendAuditEvent(ctx context.Context, e *AuditEvent) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		e.ID, e.ActorUserID, e.OrganizationID, e.ProjectID, e.Action, e.TargetType, e.TargetID, metadataJSON, e.IP, e.UserAgent, e.CreatedAt)
 	return err
+}
+
+// ---- Webhook deliveries (Phase 8.9) ----
+
+// GetOrCreateWebhookSecret returns the project's HMAC signing secret,
+// generating a random one on first use.
+func (s *Postgres) GetOrCreateWebhookSecret(ctx context.Context, projectID string) (string, error) {
+	var secret *string
+	err := s.pool.QueryRow(ctx, `SELECT webhook_secret FROM projects WHERE id = $1`, projectID).Scan(&secret)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	if secret != nil && *secret != "" {
+		return *secret, nil
+	}
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	gen := hex.EncodeToString(b[:])
+	if _, err := s.pool.Exec(ctx, `UPDATE projects SET webhook_secret = $1 WHERE id = $2`, gen, projectID); err != nil {
+		return "", err
+	}
+	return gen, nil
+}
+
+// RecordWebhookDelivery persists one delivery outcome and enforces a 30-day
+// retention window per project.
+func (s *Postgres) RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery) error {
+	if d.ID == "" {
+		d.ID = newID()
+	}
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = newTime()
+	}
+	var triggerID *string
+	if d.TriggerID != "" {
+		triggerID = &d.TriggerID
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO webhook_deliveries
+		    (id, project_id, trigger_id, target_url, collection, event,
+		     attempts, status_code, ok, error, duration_ms, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		d.ID, d.ProjectID, triggerID, d.TargetURL, d.Collection, d.Event,
+		d.Attempts, d.StatusCode, d.OK, d.Error, d.DurationMs, d.CreatedAt)
+	if err != nil {
+		return mapError(err)
+	}
+	_, _ = s.pool.Exec(ctx, `
+		DELETE FROM webhook_deliveries
+		WHERE project_id = $1 AND created_at < now() - interval '30 days'`, d.ProjectID)
+	return nil
+}
+
+// ListWebhookDeliveries returns recent deliveries, newest first, optionally
+// filtered to one trigger. Limit is clamped to [1,200].
+func (s *Postgres) ListWebhookDeliveries(ctx context.Context, projectID string, triggerID string, limit int) ([]WebhookDelivery, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var rows pgx.Rows
+	var err error
+	if triggerID != "" {
+		rows, err = s.pool.Query(ctx, `
+			SELECT id, project_id, trigger_id, target_url, collection, event,
+			       attempts, status_code, ok, error, duration_ms, created_at
+			FROM webhook_deliveries
+			WHERE project_id = $1 AND trigger_id = $2
+			ORDER BY created_at DESC LIMIT $3`, projectID, triggerID, limit)
+	} else {
+		rows, err = s.pool.Query(ctx, `
+			SELECT id, project_id, trigger_id, target_url, collection, event,
+			       attempts, status_code, ok, error, duration_ms, created_at
+			FROM webhook_deliveries
+			WHERE project_id = $1
+			ORDER BY created_at DESC LIMIT $2`, projectID, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []WebhookDelivery{}
+	for rows.Next() {
+		var d WebhookDelivery
+		var triggerID *string
+		if err := rows.Scan(&d.ID, &d.ProjectID, &triggerID, &d.TargetURL,
+			&d.Collection, &d.Event, &d.Attempts, &d.StatusCode, &d.OK,
+			&d.Error, &d.DurationMs, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		if triggerID != nil {
+			d.TriggerID = *triggerID
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }

@@ -49,6 +49,12 @@ type Config struct {
 	// default so the API boots without Docker; enable with
 	// OPENBASE_PROVISIONER_ENABLED=true when Docker is available.
 	ProvisioningEnabled bool
+
+	// AllowPrivateWebhooks disables the SSRF guard on webhook trigger
+	// destinations so self-hosters can target LAN/internal URLs. Default
+	// false: webhooks may only target public http(s) hosts. Enable with
+	// OPENBASE_ALLOW_PRIVATE_WEBHOOKS=true.
+	AllowPrivateWebhooks bool
 }
 
 // Default returns configuration populated from the environment.
@@ -67,6 +73,7 @@ func Default() (*Config, error) {
 		AllowedOrigins:  splitCSV(os.Getenv("OPENBASE_ALLOWED_ORIGINS")),
 		PublicBaseURL:   strings.TrimRight(os.Getenv("OPENBASE_PUBLIC_URL"), "/"),
 		ProvisioningEnabled: os.Getenv("OPENBASE_PROVISIONER_ENABLED") == "true",
+		AllowPrivateWebhooks: os.Getenv("OPENBASE_ALLOW_PRIVATE_WEBHOOKS") == "true",
 	}
 
 	if c.JWTSecret == "dev-only-secret-change-me" && os.Getenv("ENV") == "production" {

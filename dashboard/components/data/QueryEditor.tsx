@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
+import { Prec } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
 import { openbaseDark, openbaseLight } from "@/lib/editor-theme";
 import { useTheme } from "next-themes";
 import { Play, Trash2 } from "lucide-react";
@@ -57,8 +59,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
 
   const extensions = useMemo(() => extensionsFor(cfg.kind), [cfg.kind]);
 
-  const run = useCallback(async () => {
-    const token = authToken();
+  const run = useCallback(async () => {    const token = authToken();
     if (!token) {
       setError("Not authenticated");
       return;
@@ -86,6 +87,28 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
     }
   }, [query, projectId]);
 
+  // Cmd/Ctrl+Enter runs the query. A ref carries the latest run into the
+  // keymap (registered once) so the binding never fires a stale closure.
+  // Prec.highest beats defaultKeymap, where Mod-Enter inserts a blank line.
+  const runRef = useRef(run);
+  runRef.current = run;
+  const runKeymap = useMemo(
+    () =>
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              void runRef.current();
+              return true;
+            },
+          },
+        ])
+      ),
+    []
+  );
+  const extensionsWithRun = useMemo(() => [...extensions, runKeymap], [extensions, runKeymap]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -102,7 +125,7 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
         <CodeMirror
           value={query}
           height="220px"
-          extensions={extensions}
+          extensions={extensionsWithRun}
           theme={mounted && resolvedTheme === "light" ? openbaseLight : openbaseDark}
           onChange={(v) => setQuery(v)}
           placeholder={cfg.placeholder}
@@ -111,11 +134,17 @@ export function QueryEditor({ projectId, engine }: { projectId: string; engine: 
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => void run()} loading={running} disabled={!query.trim()}>
+        <Button
+          onClick={() => void run()}
+          loading={running}
+          disabled={!query.trim()}
+          title="Run query (Ctrl/Cmd+Enter)"
+        >
           <Play className="h-4 w-4" aria-hidden /> Run
         </Button>
         <span className="text-label text-muted-foreground">
-          Reads + writes/DDL · max 200 rows · 15s timeout · one statement per run — writes execute immediately
+          <kbd className="rounded border border-border bg-foreground/[0.04] px-1 font-mono">Ctrl/⌘ + Enter</kbd>{" "}
+          to run · Reads + writes/DDL · max 200 rows · 15s timeout · one statement per run — writes execute immediately
         </span>
       </div>
 

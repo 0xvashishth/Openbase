@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import { SegmentedOption } from "@/components/ui/segmented";
+import { useToast } from "@/components/ui/toast";
 import type { Function } from "@/lib/types";
 
 const TEMPLATES: Record<string, string> = {
@@ -28,6 +29,7 @@ const TEMPLATES: Record<string, string> = {
 };
 
 export function FunctionsPanel({ projectId }: { projectId: string }) {
+  const toast = useToast();
   const [functions, setFunctions] = useState<Function[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
       setName("");
       setSource(TEMPLATES.node);
       setRuntime("node");
+      toast.success("Function created", `${name.trim()} (${runtime}).`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create function");
@@ -96,6 +99,7 @@ export function FunctionsPanel({ projectId }: { projectId: string }) {
       if (!token) throw new Error("Not authenticated");
       await api.deleteFunction(token, projectId, fn.id);
       setPendingDelete(null);
+      toast.success("Function deleted", fn.name);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete function");

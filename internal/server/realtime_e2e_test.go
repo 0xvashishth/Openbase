@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -115,5 +116,69 @@ func TestRealtimeLiveUpdate(t *testing.T) {
 			}
 			return
 		}
+	}
+}
+
+// TestRealtimeQueryParamAuth proves the browser path: a WebSocket dialed with
+// ?apiKey= and NO Authorization header (browsers cannot set headers on
+// new WebSocket()) authenticates, subscribes, and receives the ack. A dial
+// with no credentials at all must be rejected.
+func TestRealtimeQueryParamAuth(t *testing.T) {
+	ts := newTestServer(t)
+	userDB := testutil.StartPostgres(t)
+	tok, _, pID := ts.newProject(t)
+
+	resp, js := ts.do(t, "POST", "/v1/projects/"+pID+"/connections", tok,
+		map[string]string{"connection_string": userDB.DSN})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("connect status = %d body=%v", resp.StatusCode, js)
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, userDB.DSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, `CREATE TABLE items (id SERIAL PRIMARY KEY, name TEXT NOT NULL);`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, js = ts.do(t, "POST", "/v1/projects/"+pID+"/api-keys", tok, map[string]string{"name": "rt"})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create key status = %d", resp.StatusCode)
+	}
+	key, _ := js["plaintext"].(string)
+	if key == "" {
+		t.Fatal("expected plaintext key")
+	}
+
+	// Browser-style dial: key in query, no Authorization header.
+	wsURL := "ws" + strings.TrimPrefix(ts.url, "http") + "/v1/realtime?apiKey=" + url.QueryEscape(key)
+	ws, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("query-param dial: %v", err)
+	}
+	defer ws.Close(websocket.StatusNormalClosure, "done")
+
+	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"type":"subscribe","collection":"items"}`)); err != nil {
+		t.Fatal(err)
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, ack, err := ws.Read(readCtx)
+	if err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
+	var ackMsg map[string]any
+	_ = json.Unmarshal(ack, &ackMsg)
+	if ackMsg["type"] != "subscribed" || ackMsg["collection"] != "items" {
+		t.Fatalf("expected subscribed ack, got %s", ack)
+	}
+
+	// No credentials at all must fail the handshake.
+	bareURL := "ws" + strings.TrimPrefix(ts.url, "http") + "/v1/realtime"
+	if _, _, err := websocket.Dial(ctx, bareURL, nil); err == nil {
+		t.Fatal("expected unauthenticated dial to fail")
 	}
 }

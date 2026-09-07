@@ -43,6 +43,7 @@ func TestTablesExistAfterApply(t *testing.T) {
 	want := []string{
 		"users", "organizations", "organization_members", "projects",
 		"connections", "triggers", "functions", "api_keys", "schema_migrations",
+		"webhook_deliveries",
 	}
 	for _, table := range want {
 		var exists bool

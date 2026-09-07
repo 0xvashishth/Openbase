@@ -27,7 +27,9 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ ok: boolean; ms: number
 }
 
 /**
- * Polls the platform API (auth + data endpoints) and reports overall health.
+ * Polls the platform API and reports overall health.
+ * The first check is the unauthenticated liveness probe (GET /healthz), so
+ * the badge works logged-out too; Auth/Data checks run when a token exists.
  * Never flashes "down" on mount — starts as "checking" until the first
  * round of checks settles.
  */
@@ -38,19 +40,24 @@ export function useApiStatus(enabled = true): { health: ApiHealth; latency: numb
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const run = useCallback(async () => {
-    const token = authToken();
-    if (!token) return;
-    const [auth, data] = await Promise.all([
-      timed(() => api.me(token)),
-      timed(() => api.listOrgs(token)),
-    ]);
+    const platform = await timed(() => api.health());
     const next: ApiCheck[] = [
-      { label: "Auth", ok: auth.ok, ms: auth.ok ? auth.ms : null },
-      { label: "API", ok: data.ok, ms: data.ok ? data.ms : null },
+      { label: "Platform", ok: platform.ok, ms: platform.ok ? platform.ms : null },
     ];
+    const token = authToken();
+    if (token) {
+      const [auth, data] = await Promise.all([
+        timed(() => api.me(token)),
+        timed(() => api.listOrgs(token)),
+      ]);
+      next.push(
+        { label: "Auth", ok: auth.ok, ms: auth.ok ? auth.ms : null },
+        { label: "API", ok: data.ok, ms: data.ok ? data.ms : null },
+      );
+    }
     setChecks(next);
     if (next.every((c) => c.ok)) {
-      const worst = Math.max(auth.ms, data.ms);
+      const worst = Math.max(...next.map((c) => c.ms ?? 0));
       setLatency(worst);
       setHealth(worst >= SLOW_MS ? "degraded" : "operational");
     } else if (next.some((c) => c.ok)) {

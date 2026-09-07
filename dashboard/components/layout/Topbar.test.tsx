@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render } from "./swr-test-utils";
 import { Topbar } from "./Topbar";
 import { api } from "@/lib/api";
 

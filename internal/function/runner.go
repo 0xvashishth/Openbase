@@ -37,6 +37,34 @@ const isLinux = runtime.GOOS == "linux"
 // user module, calls exports.handler(event), and prints the JSON result.
 type nodeSandbox struct{}
 
+// NodeAvailable reports whether a node binary is on PATH. The production
+// image ships one (see Dockerfile); a deployment without it must surface
+// function failures honestly instead of silently dropping them.
+func NodeAvailable() bool {
+	_, err := exec.LookPath("node")
+	return err == nil
+}
+
+// sandboxEnvAllowList is the deny-by-default set of parent environment
+// variables a user function may inherit. Everything else — notably
+// OPENBASE_JWT_SECRET, OPENBASE_ENCRYPTION_KEY(S), OPENBASE_DATABASE_URL and
+// any operator-set secrets — is dropped. PATH is non-secret and kept so the
+// runtime can resolve its own helpers; TMPDIR is confined to the sandbox dir.
+var sandboxEnvAllowList = []string{"PATH"}
+
+// sandboxEnv builds the child process environment: only allow-listed parent
+// variables plus sandbox-controlled entries. Extra entries (e.g. per-function
+// secrets from 15.3) can be passed via extra.
+func sandboxEnv(extra ...string) []string {
+	env := make([]string, 0, len(sandboxEnvAllowList)+len(extra)+1)
+	for _, k := range sandboxEnvAllowList {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return append(env, extra...)
+}
+
 // New returns a Runner supporting the implemented runtimes.
 func New() Runner { return nodeSandbox{} }
 
@@ -71,6 +99,11 @@ func (nodeSandbox) Run(ctx context.Context, source, runtime string, event map[st
 	if runtime != "node" {
 		return nil, fmt.Errorf("function: runtime %q not implemented, only node", runtime)
 	}
+	// Fail loudly when no runtime exists (e.g. a minimal image without node)
+	// rather than surfacing an opaque exec error after writing temp files.
+	if _, err := exec.LookPath("node"); err != nil {
+		return nil, fmt.Errorf("function: node runtime not available on this host: %w", err)
+	}
 	dir, err := os.MkdirTemp("", "ob-fn-")
 	if err != nil {
 		return nil, fmt.Errorf("function: mktemp: %w", err)
@@ -101,7 +134,11 @@ func (nodeSandbox) Run(ctx context.Context, source, runtime string, event map[st
 		wrapPath,
 	)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "OB_FUNCTION_PATH="+modPath)
+	// Deny-by-default environment: user code must never see platform secrets
+	// (OPENBASE_JWT_SECRET, OPENBASE_ENCRYPTION_KEY, OPENBASE_DATABASE_URL,
+	// ...). Only allow-listed non-secret variables are inherited; TMPDIR is
+	// confined to the sandbox directory, which is removed after the run.
+	cmd.Env = sandboxEnv("OB_FUNCTION_PATH="+modPath, "TMPDIR="+dir)
 	cmd.Stdin = bytes.NewReader(payload)
 
 	// Run the function as a new process group so that any child processes the

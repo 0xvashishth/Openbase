@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/openbase/openbase/internal/metadata"
+	"github.com/openbase/openbase/internal/triggers"
 )
 
 // ---- Triggers ----
@@ -86,6 +88,14 @@ func (s *Server) createTrigger(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "action_type must be function or webhook")
 		return
 	}
+	if at == metadata.ActionWebhook {
+		// Fail fast: a destination the SSRF guard would reject at dispatch
+		// can never deliver, so refuse it at creation with a clear error.
+		if err := triggers.ValidateWebhookURL(req.ActionTarget, s.svc.AllowPrivateWebhooks); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -153,6 +163,14 @@ func (s *Server) updateTrigger(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		t.Enabled = *req.Enabled
 	}
+	if t.ActionType == metadata.ActionWebhook {
+		// Same fail-fast guard as creation: a rejected destination can never
+		// deliver, so refuse the update.
+		if err := triggers.ValidateWebhookURL(t.ActionTarget, s.svc.AllowPrivateWebhooks); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err := s.svc.Store.UpdateTrigger(r.Context(), t); err != nil {
 		s.writeErr(w, err)
 		return
@@ -174,6 +192,30 @@ func (s *Server) deleteTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 	s.resyncTriggers(r, projectID)
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+// listDeliveries serves the webhook delivery log: recent attempts for the
+// project, newest first, optionally filtered to one trigger.
+// GET /v1/projects/{projectID}/triggers/deliveries?trigger_id=&limit=
+func (s *Server) listDeliveries(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	if _, _, err := s.projectAndOrg(r, projectID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d", &limit); err != nil {
+			limit = 50
+		}
+	}
+	deliveries, err := s.svc.Store.ListWebhookDeliveries(
+		r.Context(), projectID, r.URL.Query().Get("trigger_id"), limit)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, deliveries)
 }
 
 // resyncTriggers re-registers the project's DB-level triggers after any change.

@@ -5,11 +5,14 @@ import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { Button, EmptyState, ErrorBanner, Input, Label } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
+import { CopyField } from "@/components/ui/code-block";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { FormSkeleton, ListSkeleton } from "@/components/ui/skeletons";
+import { useToast } from "@/components/ui/toast";
 import type { APIKeyView } from "@/lib/types";
 
 export function APIKeysPanel({ projectId }: { projectId: string }) {
+  const toast = useToast();
   const [keys, setKeys] = useState<APIKeyView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       const res = await api.createAPIKey(token, projectId, name.trim());
       setNewKey(res.plaintext);
       setName("");
+      toast.success("API key created", "Copy it now — it won't be shown again.");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create key");
@@ -66,6 +70,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
       if (!token) throw new Error("Not authenticated");
       await api.revokeAPIKey(token, projectId, id);
       setPendingRevoke(null);
+      toast.success("API key revoked");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke key");
@@ -102,13 +107,11 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
           </Button>
         </form>
         {newKey && (
-          <div className="mt-3 max-w-xl rounded-md border border-destructive/30 bg-destructive/10 p-3">
+          <div className="mt-3 max-w-xl space-y-2 rounded-md border border-destructive/30 bg-destructive/10 p-3">
             <p className="text-label font-w510 text-destructive">
-              Copy this key now — it won't be shown again:
+              Copy this key now — it won&apos;t be shown again:
             </p>
-            <code className="mt-1 block break-all rounded-md bg-destructive/15 p-2 text-label text-destructive">
-              {newKey}
-            </code>
+            <CopyField label="New API key" value={newKey} />
           </div>
         )}
       </section>

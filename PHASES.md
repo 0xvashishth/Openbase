@@ -145,9 +145,9 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 
 - [x] `SubscribeToChanges` implemented for Postgres (native LISTEN/NOTIFY) — delivered; FerretDB (polling, clearly labeled as near-realtime not instant) explicitly deferred to a follow-up (honest-capability rule)
 - [x] WebSocket gateway for client subscriptions (`GET /v1/realtime`, API-key authed)
-- [x] Minimal client SDK (JS/TS) + live-updating list demo in the dashboard
+- [ ] Minimal client SDK (JS/TS) + live-updating list demo in the dashboard
 
-**Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter. — *Met: the dashboard "Realtime" tab subscribes over WebSocket and a live-updating list reflects REST inserts for Postgres; `RegisterRealtimeBroadcast` returns `ErrUnsupported` for non-native engines.*
+**Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter. — *Met: the dashboard "Realtime" tab subscribes over WebSocket and a live-updating list reflects REST inserts for Postgres; `RegisterRealtimeBroadcast` returns `ErrUnsupported` for non-native engines. Browser auth fixed via `?apiKey=` query fallback in `requireAPIKey` (browsers cannot set WS headers); the SDK sends the key and the demo gates its "live" indicator on socket state (`TestRealtimeQueryParamAuth`).*
 
 ## Phase 6 — BYODB Mode (mostly pulled forward into Phase 1)
 **Goal:** Users can connect an existing database instead of provisioning one.
@@ -394,38 +394,54 @@ Two things deliberately left for later: adding a member requires an existing acc
 mailer until 9.2, so an unknown address returns 404 instead of pretending an invite was sent), and
 `organization_invites` exists in migration `0003` but has no routes yet — that is 9.7.
 
-**8.7 — Abuse controls + operability.**
-Add `GET /healthz` (liveness) and `GET /readyz` (metadata DB + migration state), a Prometheus
-`/metrics` endpoint, a request-id middleware that also logs status code and bytes, per-IP rate
-limiting on `/v1/auth/*` with lockout after N failures, and per-API-key quotas. Point the
-dashboard's `ApiStatus` at `/healthz` instead of timing `GET /v1/me`. Add a container healthcheck
-for the `api` service in `docker-compose.yml`.
+**8.7 — Abuse controls + operability.** ✅ *shipped*
+`GET /healthz` (liveness, unauthenticated) and `GET /readyz` (metadata DB ping
++ migration-ledger match, 503 with reason when not ready), a dependency-free
+Prometheus `/metrics` endpoint (`openbase_http_requests_total`,
+`..._by_route`, duration sum), a request-id middleware (`X-Request-ID`,
+propagated or generated) that logs request id + status code + bytes,
+per-IP rate limiting on `/v1/auth/*` (60/min default, lockout 10 min after 10
+failed attempts), and per-API-key quotas (1000/min default, 429 +
+`Retry-After`). Limits are tunable via `Services` (`AuthRateLimitPerMin`,
+`AuthLockoutThreshold`, `APIKeyQuotaPerMin`). The dashboard `useApiStatus`
+probes `/healthz` first (works logged-out) instead of timing `GET /v1/me`,
+and `docker-compose.yml` healthchecks the `api` service via `/healthz`.
 
-**8.8 — Function sandbox: stop leaking platform secrets, and ship a runtime that works.**
-`internal/function/runner.go:104` passes `os.Environ()` through, so untrusted user code reads
-`OPENBASE_JWT_SECRET`, `OPENBASE_ENCRYPTION_KEY` and `OPENBASE_DATABASE_URL`. Switch to a
-deny-by-default env allow-list. Then fix the packaging: the runtime image is `alpine:3.20` with only
-the Go binary, so no `node` exists and function triggers silently fail in production — either add
-Node to the image or refuse to register function-actions when no runtime is detected (honest-capability
-rule). Add a per-project concurrency cap.
+**8.8 — Function sandbox: stop leaking platform secrets, and ship a runtime that works.** ✅ *shipped*
+`internal/function/runner.go` passed `os.Environ()` through; now a
+deny-by-default allow-list (`PATH` + sandbox-set `OB_FUNCTION_PATH`/`TMPDIR`,
+the latter confined to the run dir) with `sandboxEnv()` unit-tested and a
+`TestNodeRunnerDoesNotLeakParentEnv` regression test. The runtime image ships
+Node 20 (`apk add nodejs`, verified in the built image), the runner fails
+loudly when no `node` exists (`function.NodeAvailable()` + startup warning),
+and `FunctionAction` enforces a per-project concurrency cap (default 4,
+fail-fast) with `TestFunctionActionConcurrencyCap`.
 
-**8.9 — Webhook hardening.**
-`EndpointAction` (`internal/triggers/service.go:100`) POSTs with no signature, no timeout of its own
-and no destination validation, so `action_target` can be `http://169.254.169.254/…`. Add an HMAC
-`X-Openbase-Signature` (per-project secret), a request timeout, an SSRF deny-list (loopback,
-link-local, RFC1918 — configurable for self-host), retry with exponential backoff, and a
-`webhook_deliveries` table + delivery log in the Triggers UI.
+**8.9 — Webhook hardening.** ✅ *shipped*
+`EndpointAction` POSTs with an HMAC `X-Openbase-Signature: sha256=…`
+(per-project secret from `projects.webhook_secret`, generated on first use),
+a 10s delivery timeout, an SSRF deny-list (loopback, link-local incl. IMDS
+`169.254.169.254`, unspecified, multicast, RFC1918/ULA, CGNAT, mapped-v6 —
+validated at dispatch AND fail-fast at trigger create/update with 400;
+escape hatch `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`), retry with exponential
+backoff (3 attempts, only network errors/429/5xx), and a
+`webhook_deliveries` table (migration `0004`, 30-day retention) +
+`GET /v1/projects/{id}/triggers/deliveries` + delivery log in the Triggers UI
+(status, attempts, latency, error, per-trigger filter, signature hint).
 
-**8.10 — Dashboard debt that blocks everything after it.**
-Collapse the five duplicated definitions of the project tool list (`ProjectSidebar.tsx`, `nav.ts`,
-`Breadcrumbs.tsx` ×2, the Overview tile grid, `GlobalSearch.tsx`) into one source of truth — adding
-a tab currently means editing five files. Add a toast system and adopt the already-written-but-unused
-`ConfirmDialog` in place of the four `window.confirm` calls. Add `error.tsx` + `not-found.tsx`. Fix
-the auth pages: they hardcode `bg-slate-50`/`bg-white` so they ignore dark mode, and use
-`bg-brand-600`/`text-brand-600` classes that **are not defined in `tailwind.config.ts`** and emit
-nothing. Add Cmd/Ctrl+Enter to the SQL editor, copy-to-clipboard on every key/URL/snippet.
-Introduce SWR or react-query — every panel currently refetches from scratch with zero caching, and
-`GlobalSearch` re-fans-out `listOrgs`+`listProjects` on every ⌘K.
+**8.10 — Dashboard debt that blocks everything after it.** ✅ *shipped*
+The five project-tool definitions collapsed into one source of truth
+(`nav.ts` `PROJECT_TOOL_META`: slugs, labels, descriptions, sections,
+aliases — sidebar, breadcrumbs, global search and overview tiles all
+derive from it). Toast system adopted in Triggers/Functions/API-keys panels
+for mutation feedback (errors stay inline). `error.tsx` + `not-found.tsx`
+added. Cmd/Ctrl+Enter runs the SQL editor (explicit `Prec.highest` keymap;
+previously inserted a blank line). Copy-to-clipboard on the one-time API key
+(`CopyField`; Connect snippets/URLs already had it). SWR introduced:
+`useOrgList`/`useProjectList` share a deduped cache (the 3× `listOrgs`
+fan-out per page load is one request), with an isolated-cache test render
+helper. Deliberately deferred to their own phases: per-panel SWR migration
+beyond org/project lists, server-stored snippets (13.6).
 
 **Done when:** `go test ./...` and the dashboard suite are green with new negative-authorization,
 PK-resolution, multi-collection-realtime and DELETE-payload tests; a `member` provably cannot
@@ -824,12 +840,14 @@ the Security Advisor flags a table exposed without a policy before a user finds 
 **Goal:** the lifecycle work that makes the platform safe to run in production, plus the Phase 7
 leftovers.
 
-**18.1 — Backups and restore.** This is the most dangerous current gap: provisioned containers are
-created **with no volume**, so `DELETE /connections` (`docker rm -f`) destroys the data
-irrecoverably. Add persistent volumes, then per-engine scheduled logical backups (`pg_dump`,
-`mysqldump`, `mongodump`, Valkey RDB, Qdrant snapshot, ArcadeDB backup) to a Phase 14 storage
-backend, with retention, integrity verification, a restore flow, download, and a backups UI.
-PITR for Postgres (WAL archiving) as a follow-up.
+**18.1 — Backups and restore.** ✅ *volumes shipped; backups remain.*
+Provisioned containers now get named Docker volumes (`openbase_<container>`,
+created on provision, removed on destroy, cleaned up on failure paths), so
+`DELETE /connections` no longer destroys data irrecoverably. Still open:
+per-engine scheduled logical backups (`pg_dump`, `mysqldump`, `mongodump`,
+Valkey RDB, Qdrant snapshot, ArcadeDB backup) to a Phase 14 storage backend,
+with retention, integrity verification, a restore flow, download, and a
+backups UI. PITR for Postgres (WAL archiving) as a follow-up.
 
 **18.2 — Migrations for user databases.** A migration ledger inside the project database,
 `POST /v1/projects/{id}/migrations` (apply/rollback/status), a schema-diff generator that emits a
@@ -891,9 +909,9 @@ After 11, these can proceed in parallel by area:
 - **New services:** 14, 15
 - **Cross-cutting:** 17, then 18
 
-Two items are worth pulling forward out of order because they are cheap and currently dangerous:
+Two items were worth pulling forward out of order because they were cheap and dangerous —
 **8.1, 8.2, 8.8 and 8.9** (live defects and a secret leak) and **18.1's persistent volumes** (silent
-data loss on connection removal).
+data loss on connection removal) — and all are now ✅ shipped (see above).
 
 ---
 

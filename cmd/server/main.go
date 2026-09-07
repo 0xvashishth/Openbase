@@ -84,10 +84,17 @@ func run(log *slog.Logger) error {
 		AllowedOrigins: cfg.AllowedOrigins,
 		PublicBaseURL:  cfg.PublicBaseURL,
 		RealtimeHub:    server.NewRealtimeHub(store, secretsProv, engine.NewFactory(), log),
+		// Webhook SSRF guard escape hatch for self-hosters (default deny).
+		AllowPrivateWebhooks: cfg.AllowPrivateWebhooks,
 	}
 
 	// Trigger runtime (PHASES.md Phase 4): wires project triggers onto their DB
 	// adapter and dispatches change events to webhooks or sandboxed functions.
+	// Function triggers need a node binary; warn loudly when it is missing so
+	// a deployment without a runtime fails honestly instead of silently.
+	if !function.NodeAvailable() {
+		log.Warn("node runtime not found; function triggers will fail — install nodejs (see Dockerfile)")
+	}
 	trigSvc := triggers.NewService(
 		store,
 		&engine.TriggerConnector{Factory: engine.NewFactory()},
@@ -96,7 +103,7 @@ func run(log *slog.Logger) error {
 			Log:   log,
 			Action: &triggers.DispatchGroup{
 				Actions: []triggers.Action{
-					&triggers.EndpointAction{Log: log},
+					&triggers.EndpointAction{Log: log, AllowPrivate: cfg.AllowPrivateWebhooks, Store: store},
 					&triggers.FunctionAction{Store: store, Runner: function.New(), Log: log},
 				},
 			},
@@ -106,15 +113,15 @@ func run(log *slog.Logger) error {
 	svc.TriggerService = trigSvc
 	defer trigSvc.Stop()
 
-	// Provisioning (ARCHITECTURE.md §2.7): a Compose-backed provisioner that
-	// creates dedicated per-project Postgres containers. Off unless Docker is
-	// explicitly enabled.
-	if cfg.ProvisioningEnabled {
-		svc.Provisioner = &provision.ServerProvisioner{Inner: &provision.Compose{}}
-		log.Info("provisioning enabled (docker-based)")
-	} else {
-		log.Warn("OPENBASE_PROVISIONER_ENABLED not set; 'provisioned' connections are disabled")
-	}
+// Provisioning (ARCHITECTURE.md §2.7): a Compose-backed provisioner that
+// creates dedicated per-project Postgres containers. Off unless Docker is
+// explicitly enabled.
+if cfg.ProvisioningEnabled {
+	svc.Provisioner = &provision.ServerProvisioner{Inner: provision.NewCompose("openbase_")}
+	log.Info("provisioning enabled (docker-based)")
+} else {
+	log.Warn("OPENBASE_PROVISIONER_ENABLED not set; 'provisioned' connections are disabled")
+}
 
 	handler := server.New(svc)
 	defer handler.Close() // dispose pooled project adapters on shutdown

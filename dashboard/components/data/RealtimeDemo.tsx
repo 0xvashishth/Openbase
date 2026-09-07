@@ -92,11 +92,16 @@ export function RealtimeDemo({ projectId }: { projectId: string }) {
       return;
     }
 
-    // Subscribe to live changes.
+    // Subscribe to live changes. Connection state comes from the socket
+    // itself (onStatus) — never assumed up-front.
     const wsBase = API_URL.replace(/^http/, "ws");
-    const client = openbaseRealtime(`${wsBase}/v1/realtime`, key);
+    const client = openbaseRealtime(`${wsBase}/v1/realtime`, key, {
+      onStatus: (ok) => {
+        setConnected(ok);
+        setError(ok ? null : "Realtime connection lost — retrying…");
+      },
+    });
     clientRef.current = client;
-    setConnected(true);
 
     client.subscribe<Row>(
       collection,

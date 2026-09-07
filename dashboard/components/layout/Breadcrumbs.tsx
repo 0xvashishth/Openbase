@@ -18,20 +18,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { normalizeTool } from "./nav";
+import { normalizeTool, PROJECT_TOOL_META } from "./nav";
 
+// Derived from nav.ts PROJECT_TOOL_META (single source of truth) plus the
+// org-scoped entry, which is not a project tool.
 const TOOL_LABELS: Record<string, string> = {
-  overview: "Overview",
-  tables: "Tables",
-  schema: "Schema",
-  sql: "SQL Editor",
-  api: "API Keys",
-  functions: "Functions",
-  triggers: "Triggers",
-  realtime: "Realtime",
-  connect: "Connect",
-  "db-source": "DB Source",
-  settings: "Settings",
+  ...Object.fromEntries(PROJECT_TOOL_META.map((t) => [t.slug, t.label])),
   members: "Members",
 };
 
@@ -48,17 +40,7 @@ export function toolLabel(tool: string | null | undefined): string {
  * description now lives behind a trailing info icon in the breadcrumbs.
  */
 const TOOL_DESCRIPTIONS: Record<string, string> = {
-  overview: "Project status and shortcuts.",
-  tables: "Browse collections and rows — like Supabase's table editor.",
-  schema: "Visual tables and relationships.",
-  sql: "Run reads and writes in your database's own language.",
-  api: "Keys for your auto-generated REST API.",
-  functions: "Serverless functions triggered by data events.",
-  triggers: "When X happens on a table, run a function or webhook.",
-  realtime: "Live WebSocket updates for native engines.",
-  connect: "Connect your app to Openbase — URLs, keys and code snippets.",
-  "db-source": "Provision a database or connect your own.",
-  settings: "Project metadata and danger zone.",
+  ...Object.fromEntries(PROJECT_TOOL_META.map((t) => [t.slug, t.description])),
   members: "People with access to this organization.",
 };
 

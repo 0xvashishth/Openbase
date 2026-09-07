@@ -199,6 +199,22 @@ export interface Trigger {
   created_at: string;
 }
 
+// One webhook delivery attempt record (Phase 8.9 delivery log).
+export interface WebhookDelivery {
+  id: string;
+  project_id: string;
+  trigger_id?: string;
+  target_url: string;
+  collection: string;
+  event: string;
+  attempts: number;
+  status_code?: number | null;
+  ok: boolean;
+  error?: string;
+  duration_ms: number;
+  created_at: string;
+}
+
 export type FunctionRuntime = "node" | "python";
 
 export interface Function {

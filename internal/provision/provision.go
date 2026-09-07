@@ -22,6 +22,8 @@ type Instance struct {
 	Engine Engine
 	// ConnString bypasses TLS (local), with embedded credentials.
 	ConnString string
+	// Volume is the named Docker volume for data persistence (if applicable).
+	Volume string
 }
 
 // ProvisionerInterface creates and destroys dedicated database instances.

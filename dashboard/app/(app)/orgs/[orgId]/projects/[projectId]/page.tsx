@@ -10,6 +10,24 @@ import { ProjectOverviewSkeleton } from "@/components/ui/skeletons";
 import { ProjectGuard } from "@/components/projects/ProjectGuard";
 import { useProject } from "@/lib/project-context";
 import { PageShell } from "@/components/layout/PageShell";
+import { PROJECT_TOOL_META, projectToolPath } from "@/components/layout/nav";
+
+// Tiles shown on the overview grid (overview + settings live elsewhere).
+// Slugs/labels/descriptions derive from nav.ts; icons + connection locks
+// stay local because they are presentation.
+const TILE_ICONS: Record<string, typeof Table2> = {
+  tables: Table2,
+  schema: Network,
+  sql: SquareTerminal,
+  connect: Cable,
+  api: KeyRound,
+  functions: Zap,
+  triggers: Database,
+  realtime: Radio,
+  "db-source": Plug,
+};
+
+const TILE_SLUGS = ["tables", "schema", "sql", "connect", "api", "functions", "triggers", "realtime", "db-source"];
 
 function OverviewBody() {
   const { orgId, projectId, project, engine, hasConnection, loading, error } = useProject();
@@ -22,17 +40,17 @@ function OverviewBody() {
   }
 
   const base = `/orgs/${orgId}/projects/${projectId}`;
-  const tools = [
-    { href: `${base}/tables`, icon: Table2, title: "Tables", desc: "Browse collections and rows.", locked: !hasConnection },
-    { href: `${base}/schema`, icon: Network, title: "Schema", desc: "Visual tables and relationships.", locked: !hasConnection },
-    { href: `${base}/sql`, icon: SquareTerminal, title: "SQL Editor", desc: "Run reads and writes natively.", locked: !hasConnection },
-    { href: `${base}/connect`, icon: Cable, title: "Connect", desc: "URLs, keys and snippets for your app.", locked: false },
-    { href: `${base}/api`, icon: KeyRound, title: "API Keys", desc: "Auto-generated REST API access.", locked: false },
-    { href: `${base}/functions`, icon: Zap, title: "Functions", desc: "Serverless event handlers.", locked: !hasConnection },
-    { href: `${base}/triggers`, icon: Database, title: "Triggers", desc: "Data events → functions/webhooks.", locked: !hasConnection },
-    { href: `${base}/realtime`, icon: Radio, title: "Realtime", desc: "Live WebSocket change streams.", locked: !hasConnection },
-    { href: `${base}/db-source`, icon: Plug, title: "DB Source", desc: "Provision or attach the backing DB.", locked: false },
-  ];
+  const tools = PROJECT_TOOL_META.filter((t) => TILE_SLUGS.includes(t.slug)).map((t) => {
+    const Icon = TILE_ICONS[t.slug] ?? Table2;
+    const unlocked = t.slug === "connect" || t.slug === "api" || t.slug === "db-source";
+    return {
+      href: projectToolPath(orgId, projectId, t.slug),
+      icon: Icon,
+      title: t.label,
+      desc: t.description,
+      locked: !unlocked && !hasConnection,
+    };
+  });
 
   return (
     <div className="space-y-4">

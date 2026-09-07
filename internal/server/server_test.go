@@ -69,6 +69,8 @@ func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
 		Secrets:        secretsProv,
 		Provisioner:    prov,
 		RealtimeHub:    server.NewRealtimeHub(store, secretsProv, engine.NewFactory(), logger),
+		// Tests target loopback httptest receivers for webhooks.
+		AllowPrivateWebhooks: true,
 	}
 	t.Cleanup(svc.RealtimeHub.CloseAll)
 
@@ -80,7 +82,9 @@ func newTestServerWith(t *testing.T, prov server.Provisioner) *testServer {
 			Store:  store,
 			Log:    logger,
 			Action: &triggers.DispatchGroup{Actions: []triggers.Action{
-				&triggers.EndpointAction{Log: logger},
+				// Tests receive webhooks on loopback httptest servers, which
+				// the production SSRF guard would reject.
+				&triggers.EndpointAction{Log: logger, AllowPrivate: true, Store: store},
 				&triggers.FunctionAction{Store: store, Runner: function.New(), Log: logger},
 			}},
 		},

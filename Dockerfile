@@ -8,6 +8,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openbase-server ./
 
 # Runtime stage
 FROM alpine:3.20
+# Node.js runtime for user functions (Phase 4/8.8): without this, function
+# triggers silently fail in production — the image previously shipped only
+# the Go binary. Pinned via apk to keep the image reproducible.
+RUN apk add --no-cache nodejs~=20
 RUN adduser -D -u 10001 openbase
 USER openbase
 COPY --from=build /out/openbase-server /usr/local/bin/openbase-server

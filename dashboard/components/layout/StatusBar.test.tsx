@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render } from "./swr-test-utils";
 import { StatusBar } from "./StatusBar";
 
 vi.mock("@/lib/api", () => ({ api: { me: vi.fn(), listOrgs: vi.fn() } }));

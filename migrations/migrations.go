@@ -21,6 +21,9 @@ var migration0002 string
 //go:embed 0003_org_project_settings.sql
 var migration0003 string
 
+//go:embed 0004_webhook_deliveries.sql
+var migration0004 string
+
 type migration struct {
 	version string
 	sql     string
@@ -30,6 +33,7 @@ var all = []migration{
 	{version: "0001_init", sql: migration0001},
 	{version: "0002_api_key_hash_index", sql: migration0002},
 	{version: "0003_org_project_settings", sql: migration0003},
+	{version: "0004_webhook_deliveries", sql: migration0004},
 }
 
 // Apply runs all unapplied migrations inside transaction per migration.
@@ -71,6 +75,16 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 	}
 	return nil
+}
+
+// ExpectedVersions returns the migration versions this binary knows about,
+// in apply order. Used by GET /readyz to detect schema drift.
+func ExpectedVersions() []string {
+	out := make([]string, 0, len(all))
+	for _, m := range all {
+		out = append(out, m.version)
+	}
+	return out
 }
 
 // AppliedVersions returns the set of migration versions already applied.
