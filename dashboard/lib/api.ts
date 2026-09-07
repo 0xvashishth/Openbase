@@ -109,6 +109,10 @@ export const api = {
   login: (email: string, password: string) =>
     request<AuthResponse>("POST", "/v1/auth/login", { email, password }),
   me: (token: string) => request<User>("GET", "/v1/me", undefined, token),
+  forgotPassword: (email: string) =>
+    request<{ status: string }>("POST", "/v1/auth/forgot", { email }),
+  resetPassword: (token: string, password: string) =>
+    request<{ status: string }>("POST", "/v1/auth/reset", { token, password }),
 
   // Platform mail settings (Phase 9.2, owner-gated). The SMTP password is
   // write-only and never returned.

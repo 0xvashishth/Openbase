@@ -498,6 +498,12 @@ instead of 500ing.
 expiry), change password (re-auth + revoke other sessions), change email (confirm both addresses).
 Fix the timing oracle in login — the "no such user" branch skips bcrypt entirely.
 
+> *Shipped (partial):* `POST /v1/auth/forgot` and `POST /v1/auth/reset` (single-use hashed tokens, 1 h
+> expiry, mail-driven via `mail.TemplateResetPassword`); timing-oracle fix in login (bogus bcrypt
+> always runs); `/forgot-password` and `/reset-password` dashboard pages. *Remaining:* change
+> password (with session revocation), change email (both-address confirmation), email verification
+> at registration.
+
 **9.4 — Account settings UI.** `/account`: profile (`full_name` is currently write-once at
 registration), email, password, sessions/devices list with revoke, delete account.
 

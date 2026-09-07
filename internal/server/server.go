@@ -208,6 +208,8 @@ func New(svc *Services) Handler {
 	// failures (Phase 8.7) — they are the brute-force surface.
 	mux.Handle("POST /v1/auth/register", s.limitAuth(http.HandlerFunc(s.register)))
 	mux.Handle("POST /v1/auth/login", s.limitAuth(http.HandlerFunc(s.login)))
+	mux.Handle("POST /v1/auth/forgot", s.limitAuth(http.HandlerFunc(s.forgotPassword)))
+	mux.Handle("POST /v1/auth/reset", s.limitAuth(http.HandlerFunc(s.resetPassword)))
 
 	// Operability probes (unauthenticated by design: load balancers and
 	// container healthchecks cannot present credentials).

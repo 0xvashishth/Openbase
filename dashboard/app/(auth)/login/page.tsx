@@ -87,6 +87,15 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
+
+        <p className="mt-2 text-caption text-muted-foreground">
+          <Link
+            href="/forgot-password"
+            className="text-foreground underline decoration-border decoration-1 underline-offset-4 transition-colors hover:decoration-foreground"
+          >
+            Forgot password?
+          </Link>
+        </p>
       </div>
     </div>
   );

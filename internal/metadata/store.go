@@ -279,6 +279,12 @@ type Store interface {
 	RecordMailLog(ctx context.Context, e *MailLog) error
 	ListMailLog(ctx context.Context, limit int) ([]MailLog, error)
 
+	// Password reset tokens (Phase 9.3 credential lifecycle).
+	CreateResetPasswordToken(ctx context.Context, userID string, ttl time.Duration) (string, *ResetPasswordToken, error)
+	GetResetPasswordToken(ctx context.Context, hash string) (*ResetPasswordToken, error)
+	MarkResetPasswordTokenUsed(ctx context.Context, id string) error
+	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
 }
