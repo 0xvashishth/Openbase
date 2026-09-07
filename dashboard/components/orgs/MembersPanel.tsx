@@ -32,6 +32,7 @@ import { ListSkeleton } from "@/components/ui/skeletons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { OrgMember, OrgRole, User } from "@/lib/types";
+import { InvitesPanel } from "@/components/orgs/InvitesPanel";
 
 const ROLE_ORDER: Record<OrgRole, number> = { owner: 3, admin: 2, member: 1 };
 
@@ -117,13 +118,14 @@ export function MembersPanel() {
     setAddError(null);
     const email = addEmail.trim();
     if (!email) {
-      setAddError("Enter the email address of an existing Openbase account.");
+      setAddError("Enter an email address.");
       return;
     }
     setAdding(true);
     try {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
+      // First try adding as an existing user
       await api.addMember(token, orgId, email, addRole);
       await load();
       setAddOpen(false);
@@ -132,9 +134,13 @@ export function MembersPanel() {
       toast.success("Member added", email);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        // There is no mailer yet (PHASES 9.2), so an invite cannot be sent.
-        // Say so plainly instead of implying one went out.
-        setAddError("No Openbase account uses that email — they need to sign up first.");
+        // User not found — send an invite instead
+        try {
+          await api.createInvite(token, orgId, email, addRole);
+          toast.success("Invite sent to " + email + "; recipient sets password & joins");
+        } catch (invErr) {
+          setAddError(invErr instanceof Error ? invErr.message : "Failed to send invite");
+        }
       } else if (err instanceof ApiError && err.status === 409) {
         setAddError("That person is already a member of this organization.");
       } else {

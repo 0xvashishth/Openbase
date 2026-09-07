@@ -457,16 +457,59 @@ IP, `expires_at`, `revoked_at`). Short-lived access token (15 min) + rotating re
 reuse detection. `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `POST /v1/auth/logout-all`.
 Today a stolen JWT is valid for its full 24 h and deleting the user does not invalidate it.
 
-**9.2 — Mailer abstraction.** `internal/mail` with an SMTP sender, a dev/log sink, and templated
-HTML+text messages. There is currently no mail capability anywhere in the repo, which is why 9.3,
+**9.2 — Dashboard-managed mailer (BYOC SMTP).** `internal/mail` with a `Sender`
+interface, an SMTP sender (STARTTLS, PLAIN/LOGIN auth, dial + I/O timeouts), a
+dev/log sink, and templated HTML+text messages sharing one layout (verify-email,
+reset-password, org-invite now; magic-link/OTP templates arrive with Phase 10).
+There is currently no mail capability anywhere in the repo, which is why 9.3,
 9.7 and most of Phase 10 are blocked.
+
+The operator brings their own credentials in the dashboard — no env-var
+round-trip, no redeploy:
+
+- **Storage (migration `0005`):** `mail_settings` singleton (provider
+  `smtp|log`, host, port, username, envelope-encrypted password + key id,
+  from address/name) and `mail_log` (to, template, subject, ok, error,
+  created_at, 30-day retention). The SMTP password reuses the envelope
+  encryption from `ARCHITECTURE.md` §2.6 (generic encrypt/decrypt-value
+  methods on the secrets provider, rotation-aware like connections).
+- **Resolution:** a `MailService` resolves the effective sender per send —
+  configured SMTP, else the log sink (honest fallback: unconfigured
+  instances log instead of failing, and the UI says so). All mail flows
+  (9.3, 9.7, Phase 10) send through `MailService`, never SMTP directly.
+- **API (platform scope, `GET/PUT /v1/admin/mail/settings`,
+  `POST /v1/admin/mail/test`, `GET /v1/admin/mail/log`):** settings read
+  (password redacted — `***` unless unset), upsert with validation, test send
+  of a sample template to an arbitrary address with the delivery result
+  inline, and the log for debugging. Gated to org **owners** (any org — V1
+  simplification, documented: self-hosted instances have one operator; true
+  instance roles are a later concern).
+- **Dashboard:** PlatformSidebar gains an Email entry → `/settings/email`
+  page with provider select (SMTP/Log), credential fields, from address,
+  save, "Send test email" with inline result, delivery-log table, and the
+  honest unconfigured state.
+
+**Done when:** an operator pastes Mailgun/Gmail SMTP credentials into the
+dashboard, clicks "Send test email", receives it, sees the attempt in the
+log — and an unconfigured instance still signs users up (logging mail)
+instead of 500ing.
 
 **9.3 — Credential lifecycle.** Email verification, forgot/reset password (single-use tokens with
 expiry), change password (re-auth + revoke other sessions), change email (confirm both addresses).
 Fix the timing oracle in login — the "no such user" branch skips bcrypt entirely.
 
+> *Shipped (partial):* `POST /v1/auth/forgot` and `POST /v1/auth/reset` (single-use hashed tokens, 1 h
+> expiry, mail-driven via `mail.TemplateResetPassword`); timing-oracle fix in login (bogus bcrypt
+> always runs); `/forgot-password` and `/reset-password` dashboard pages. *Remaining:* change
+> password (with session revocation), change email (both-address confirmation), email verification
+> at registration.
+
 **9.4 — Account settings UI.** `/account`: profile (`full_name` is currently write-once at
 registration), email, password, sessions/devices list with revoke, delete account.
+
+> *Shipped (partial):* `/account` with profile editing (`full_name`), change password, and active
+> sessions list with revoke (Phase 9.4 + 9.3 change-password endpoint). *Remaining:* email change,
+> delete account.
 
 **9.5 — Dashboard SSO.** GitHub + Google OAuth for *platform* login, `identities` table, account
 linking. SAML behind a build flag (stretch).
@@ -480,6 +523,10 @@ and adding an existing account by email works. What remains is the part that nee
 email invites with an accept flow. Migration `0003` already ships
 `organization_invites (org_id, email, role, token_hash, invited_by, expires_at, accepted_at)`, so
 this is `POST /v1/orgs/{id}/invites` returning a one-time link plus
+
+> *Shipped:* `GET/POST /v1/orgs/{id}/invites`, `DELETE /v1/orgs/{id}/invites/{inviteID}`,
+> `POST /v1/invites/accept` (auto-creates user with name+password if needed); mail-driven via
+> `mail.TemplateOrgInvite`; `InvitesPanel` dashboard component; `/invite` accept page.
 `POST /v1/invites/{token}/accept` — usable out-of-band for self-hosters even before 9.2 lands, with
 mail becoming just another delivery channel for the same token.
 
@@ -487,6 +534,11 @@ mail becoming just another delivery channel for the same token.
 for login, key mint/revoke, connection change, **every raw SQL execution**, DDL, member/role change,
 project delete. `GET /v1/orgs/{id}/audit` + a filterable UI. Nothing today records that a member ran
 `DROP TABLE` through the SQL editor.
+
+> *Shipped (partial):* `PostgresAuditSink` wired in place of `NoopAuditSink` when a store is
+> present; `GET /v1/orgs/{id}/audit` (admin+, `?limit=`); `ListAuditEvents` metadata method.
+> *Remaining:* instrument every mutating handler to call `AuditSink.Record`; filterable dashboard
+> UI; ingest IP/UA from request context.
 
 *Seam already in place from 8.6:* `server.AuditSink` is an interface on `Services` with a no-op
 default, and every org/project mutation already calls `Record(actor, org, project, action, target,

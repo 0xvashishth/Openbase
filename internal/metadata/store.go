@@ -273,8 +273,29 @@ type Store interface {
 	RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery) error
 	ListWebhookDeliveries(ctx context.Context, projectID string, triggerID string, limit int) ([]WebhookDelivery, error)
 
+	// Mail settings + log (Phase 9.2 dashboard-managed mailer).
+	GetMailSettings(ctx context.Context) (*MailSettings, error)
+	UpdateMailSettings(ctx context.Context, s *MailSettings) error
+	RecordMailLog(ctx context.Context, e *MailLog) error
+	ListMailLog(ctx context.Context, limit int) ([]MailLog, error)
+
+	// Sessions (Phase 9.1 refresh tokens).
+	CreateSession(ctx context.Context, ses *Session) error
+	GetSessionByHash(ctx context.Context, hash string) (*Session, error)
+	RevokeSession(ctx context.Context, id string) error
+	RevokeUserSessions(ctx context.Context, userID string) error
+	ListSessions(ctx context.Context, userID string) ([]Session, error)
+
+	// Password reset tokens (Phase 9.3 credential lifecycle).
+	CreateResetPasswordToken(ctx context.Context, userID string, ttl time.Duration) (string, *ResetPasswordToken, error)
+	GetResetPasswordToken(ctx context.Context, hash string) (*ResetPasswordToken, error)
+	MarkResetPasswordTokenUsed(ctx context.Context, id string) error
+	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+	UpdateUserProfile(ctx context.Context, userID, fullName string) error
+
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
+	ListAuditEvents(ctx context.Context, orgID string, limit int) ([]AuditEvent, error)
 }
 
 // WebhookDelivery records one webhook trigger delivery attempt for the
@@ -294,6 +315,30 @@ type WebhookDelivery struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// MailSettings is the operator's mail provider (Phase 9.2). The SMTP
+// password is stored envelope-encrypted and is never exposed via the API.
+type MailSettings struct {
+	Provider          string `json:"provider"`
+	SMTPHost          string `json:"smtp_host"`
+	SMTPPort          int    `json:"smtp_port"`
+	SMTPUsername      string `json:"smtp_username"`
+	EncryptedPassword []byte `json:"-"`
+	EncryptionKeyID   string `json:"-"`
+	FromAddress       string `json:"from_address"`
+	FromName          string `json:"from_name"`
+}
+
+// MailLog records one outbound send attempt for the dashboard delivery log.
+type MailLog struct {
+	ID        string    `json:"id"`
+	ToAddress string    `json:"to_address"`
+	Template  string    `json:"template"`
+	Subject   string    `json:"subject"`
+	OK        bool      `json:"ok"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // AuditEvent represents a single audit log entry.
 type AuditEvent struct {
 	ID              string         `json:"id"`
@@ -308,3 +353,5 @@ type AuditEvent struct {
 	UserAgent       string         `json:"user_agent,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 }
+
+

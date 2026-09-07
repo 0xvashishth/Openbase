@@ -3,8 +3,10 @@ package server
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/openbase/openbase/internal/auth"
+	"github.com/openbase/openbase/internal/mail"
 	"github.com/openbase/openbase/internal/metadata"
 )
 
@@ -64,12 +66,19 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, err := s.svc.Store.GetUserByEmail(r.Context(), req.Email)
-	if err != nil {
-		// Do not reveal whether the email exists.
+	// Timing-oracle defence: always run bcrypt to avoid leaking which
+	// addresses are registered. A bogus hash will not match anything.
+	const bogusHash = "$2a$10$abcdefghijklmnopqrstuOOkNhE5xZqV7i7.LxXNxKlqi7B0uGJaK"
+	storedHash := bogusHash
+	if err == nil {
+		storedHash = u.PasswordHash
+	}
+	if !auth.VerifyPassword(storedHash, req.Password) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	if !auth.VerifyPassword(u.PasswordHash, req.Password) {
+	if err != nil {
+		// User didn't exist but bcrypt succeeded against the bogus hash.
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -92,6 +101,237 @@ func (s *Server) respondWithToken(w http.ResponseWriter, status int, u *metadata
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	u, err := s.svc.Store.GetUserByID(r.Context(), userIDFromContext(r.Context()))
 	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
+// forgotPasswordRequest is the POST body for /v1/auth/forgot.
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// resetPasswordRequest is the POST body for /v1/auth/reset.
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+// forgotPassword always returns 200 — it must never reveal whether the
+// email is registered (enumeration defence). If the user exists, it
+// generates a single-use reset token, stores only its hash, and sends a
+// reset link via the mail service.
+func (s *Server) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+
+	// Best-effort: silently no-op on any error. We never want to leak
+	// whether the address exists.
+	if req.Email != "" {
+		if u, err := s.svc.Store.GetUserByEmail(r.Context(), req.Email); err == nil {
+			plaintext, _, err := s.svc.Store.CreateResetPasswordToken(r.Context(), u.ID, time.Hour)
+			if err == nil {
+				// Send the email. Failures are logged, not returned.
+				data := mail.TemplateData{
+					Recipient: u.Email,
+					ActionURL: publicBaseURL(r, "") + "/reset?token=" + plaintext,
+					Expires:   "1 hour",
+				}
+				if sendErr := s.mailService().SendTemplate(r.Context(), u.Email, mail.TemplateResetPassword, data); sendErr != nil {
+					// Log only — never fail the request.
+					_ = sendErr
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// resetPassword consumes a single-use reset token and sets a new password.
+// Tokens are single-use, expire after 1 hour, and the plaintext never
+// touched the database.
+func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Token = strings.TrimSpace(req.Token)
+	if req.Token == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, "token and password are required")
+		return
+	}
+	if len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+
+	hash, err := auth.HashRefreshToken(req.Token)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid token")
+		return
+	}
+
+	rt, err := s.svc.Store.GetResetPasswordToken(r.Context(), hash)
+	if err != nil || rt == nil {
+		writeError(w, http.StatusBadRequest, "invalid or expired token")
+		return
+	}
+
+	passHash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	if err := s.svc.Store.SetUserPassword(r.Context(), rt.UserID, passHash); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	if err := s.svc.Store.MarkResetPasswordTokenUsed(r.Context(), rt.ID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SessionView is what the dashboard sees — never the refresh-token hash.
+type SessionView struct {
+	ID        string    `json:"id"`
+	UserAgent string    `json:"user_agent"`
+	IP        string    `json:"ip"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+}
+
+// listMySessions lists all sessions for the authenticated user.
+func (s *Server) listMySessions(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromContext(r.Context())
+	sessions, err := s.svc.Store.ListSessions(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	out := make([]SessionView, len(sessions))
+	for i, sess := range sessions {
+		out[i] = SessionView{
+			ID:        sess.ID,
+			UserAgent: sess.UserAgent,
+			IP:        sess.IP,
+			CreatedAt: sess.CreatedAt,
+			ExpiresAt: sess.ExpiresAt,
+			RevokedAt: sess.RevokedAt,
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// revokeMySession revokes a specific session owned by the authenticated user.
+// Users can only revoke their own sessions.
+func (s *Server) revokeMySession(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromContext(r.Context())
+	sessionID := r.PathValue("sessionID")
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "session id required")
+		return
+	}
+	// Verify ownership: only allow revoking sessions belonging to the caller.
+	sessions, err := s.svc.Store.ListSessions(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	owns := false
+	for _, sess := range sessions {
+		if sess.ID == sessionID {
+			owns = true
+			break
+		}
+	}
+	if !owns {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if err := s.svc.Store.RevokeSession(r.Context(), sessionID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+// changePasswordRequest is the POST body for /v1/me/password.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// changePassword updates the authenticated user's password after verifying
+// their current password. Other sessions are revoked on success.
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current and new password are required")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+	uid := userIDFromContext(r.Context())
+	u, err := s.svc.Store.GetUserByID(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if !auth.VerifyPassword(u.PasswordHash, req.CurrentPassword) {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if err := s.svc.Store.SetUserPassword(r.Context(), uid, hash); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// updateProfileRequest is the PATCH body for /v1/me.
+type updateProfileRequest struct {
+	FullName string `json:"full_name"`
+}
+
+// updateProfile updates mutable profile fields (currently only full_name).
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
+	var req updateProfileRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	uid := userIDFromContext(r.Context())
+	u, err := s.svc.Store.GetUserByID(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	u.FullName = req.FullName
+	if err := s.svc.Store.UpdateUserProfile(r.Context(), u.ID, u.FullName); err != nil {
 		s.writeErr(w, err)
 		return
 	}

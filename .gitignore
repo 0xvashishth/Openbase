@@ -19,6 +19,9 @@ dashboard/.next/
 dashboard/out/
 dashboard/.env.local
 
+# Accidental root installs (all JS lives under dashboard/)
+node_modules/
+
 # Editor / OS
 .idea/
 .vscode/

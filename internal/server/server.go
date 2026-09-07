@@ -123,6 +123,11 @@ type SecretsProvider interface {
 	DecryptConnection(conn *metadata.Connection) (metadata.ConnectionSecret, error)
 	// EncryptConnection encrypts credential fields into the connection struct.
 	EncryptConnection(c *metadata.Connection, secret metadata.ConnectionSecret) error
+	// EncryptValue envelope-encrypts an arbitrary string (e.g. the SMTP
+	// password), returning ciphertext + key id for rotation-aware reads.
+	EncryptValue(plaintext string) (ciphertext []byte, keyID string, err error)
+	// DecryptValue reverses EncryptValue.
+	DecryptValue(ciphertext []byte, keyID string) (string, error)
 }
 
 // AdapterFactory builds a live adapter for a project connection. It is used by
@@ -192,9 +197,15 @@ func (h handler) Close() { h.srv.Close() }
 func New(svc *Services) Handler {
 	mux := http.NewServeMux()
 	// Default the audit sink rather than nil-checking at ~15 call sites; a
-	// missed check would be a nil dereference on a mutating request.
+	// missed check would be a nil dereference on a mutating request. Use the
+	// Postgres writer when a store is present (Phase 9.8); fall back to no-op
+	// when running with a non-persistent store (tests).
 	if svc.AuditSink == nil {
-		svc.AuditSink = &NoopAuditSink{}
+		if svc.Store != nil {
+			svc.AuditSink = &PostgresAuditSink{Store: svc.Store, Log: svc.Log}
+		} else {
+			svc.AuditSink = &NoopAuditSink{}
+		}
 	}
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 	s.adapters = s.newAdapterPool()
@@ -203,6 +214,8 @@ func New(svc *Services) Handler {
 	// failures (Phase 8.7) — they are the brute-force surface.
 	mux.Handle("POST /v1/auth/register", s.limitAuth(http.HandlerFunc(s.register)))
 	mux.Handle("POST /v1/auth/login", s.limitAuth(http.HandlerFunc(s.login)))
+	mux.Handle("POST /v1/auth/forgot", s.limitAuth(http.HandlerFunc(s.forgotPassword)))
+	mux.Handle("POST /v1/auth/reset", s.limitAuth(http.HandlerFunc(s.resetPassword)))
 
 	// Operability probes (unauthenticated by design: load balancers and
 	// container healthchecks cannot present credentials).
@@ -211,6 +224,10 @@ func New(svc *Services) Handler {
 	mux.HandleFunc("GET /metrics", s.metrics)
 
 	mux.Handle("GET /v1/me", s.requireAuth(http.HandlerFunc(s.me)))
+	mux.Handle("PATCH /v1/me", s.requireAuth(http.HandlerFunc(s.updateProfile)))
+	mux.Handle("POST /v1/me/password", s.requireAuth(http.HandlerFunc(s.changePassword)))
+	mux.Handle("GET /v1/me/sessions", s.requireAuth(http.HandlerFunc(s.listMySessions)))
+	mux.Handle("DELETE /v1/me/sessions/{sessionID}", s.requireAuth(http.HandlerFunc(s.revokeMySession)))
 
 	mux.Handle("POST /v1/orgs", s.requireAuth(http.HandlerFunc(s.createOrg)))
 	mux.Handle("GET /v1/orgs", s.requireAuth(http.HandlerFunc(s.listOrgs)))
@@ -221,6 +238,11 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/orgs/{orgID}/members", s.requireAuth(http.HandlerFunc(s.addMember)))
 	mux.Handle("PATCH /v1/orgs/{orgID}/members/{userID}", s.requireAuth(http.HandlerFunc(s.updateMemberRole)))
 	mux.Handle("DELETE /v1/orgs/{orgID}/members/{userID}", s.requireAuth(http.HandlerFunc(s.removeMember)))
+	mux.Handle("GET /v1/orgs/{orgID}/invites", s.requireAuth(http.HandlerFunc(s.listInvites)))
+	mux.Handle("POST /v1/orgs/{orgID}/invites", s.requireAuth(http.HandlerFunc(s.createInvite)))
+	mux.Handle("DELETE /v1/orgs/{orgID}/invites/{inviteID}", s.requireAuth(http.HandlerFunc(s.revokeInvite)))
+	mux.Handle("POST /v1/invites/accept", s.limitAuth(http.HandlerFunc(s.acceptInvite)))
+	mux.Handle("GET /v1/orgs/{orgID}/audit", s.requireAuth(http.HandlerFunc(s.listAuditEvents)))
 	mux.Handle("POST /v1/orgs/{orgID}/transfer-ownership", s.requireAuth(http.HandlerFunc(s.transferOwnership)))
 	mux.Handle("POST /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.createProject)))
 	mux.Handle("GET /v1/orgs/{orgID}/projects", s.requireAuth(http.HandlerFunc(s.listProjects)))
@@ -261,6 +283,13 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/projects/{projectID}/functions", s.requireAuth(http.HandlerFunc(s.createFunction)))
 	mux.Handle("GET /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.getFunction)))
 	mux.Handle("DELETE /v1/projects/{projectID}/functions/{fnID}", s.requireAuth(http.HandlerFunc(s.deleteFunction)))
+
+	// Platform mail settings (Phase 9.2, dashboard-managed BYOC SMTP).
+	// Owner-of-any-org gated; see requireAnyOrgOwner.
+	mux.Handle("GET /v1/admin/mail/settings", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.getMailSettings))))
+	mux.Handle("PUT /v1/admin/mail/settings", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.updateMailSettings))))
+	mux.Handle("POST /v1/admin/mail/test", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.testMailSend))))
+	mux.Handle("GET /v1/admin/mail/log", s.requireAuth(s.requireAnyOrgOwner(http.HandlerFunc(s.listMailLog))))
 
 	// Auto-generated REST API (API-key-authenticated, project scoped via key).
 	mux.Handle("GET /v1/api/tables", s.requireAPIKey(http.HandlerFunc(s.apiListTables)))

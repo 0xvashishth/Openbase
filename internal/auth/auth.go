@@ -4,9 +4,12 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -102,6 +105,32 @@ func RandomHex(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// Refresh token format: obr_<base64url(32 bytes)>. Only the SHA-256 hash is
+// ever stored (sessions.refresh_hash) — like API keys, a leaked database
+// never yields usable tokens.
+const refreshPrefix = "obr_"
+
+// NewRefreshToken generates an opaque refresh token and its storage hash.
+func NewRefreshToken() (plaintext, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", err
+	}
+	plaintext = refreshPrefix + base64.RawURLEncoding.EncodeToString(b)
+	sum := sha256.Sum256([]byte(plaintext))
+	return plaintext, hex.EncodeToString(sum[:]), nil
+}
+
+// HashRefreshToken hashes a presented refresh token for lookup. It validates
+// the prefix so malformed input fails before touching the database.
+func HashRefreshToken(raw string) (string, error) {
+	if !strings.HasPrefix(raw, refreshPrefix) {
+		return "", errors.New("auth: invalid refresh token format")
+	}
+	sum := sha256.Sum256([]byte(strings.TrimSpace(raw)))
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // ConstantTimeEqual compares two strings in constant time.

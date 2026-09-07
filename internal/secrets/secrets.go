@@ -115,3 +115,35 @@ func (p *Provider) DecryptConnection(c *metadata.Connection) (metadata.Connectio
 		Password:   string(ps),
 	}, nil
 }
+// EncryptValue envelope-encrypts an arbitrary string (e.g. an SMTP password)
+// under the current master key, returning the ciphertext and the key id to
+// store alongside it for rotation-aware decryption.
+func (p *Provider) EncryptValue(plaintext string) (ciphertext []byte, keyID string, err error) {
+	enc, err := crypto.NewKeyedEncryptor(p.master.Current())
+	if err != nil {
+		return nil, "", err
+	}
+	ct, err := enc.Encrypt([]byte(plaintext))
+	if err != nil {
+		return nil, "", err
+	}
+	return ct, p.master.Current().ID(), nil
+}
+
+// DecryptValue reverses EncryptValue, selecting key material by the stored
+// key id so rotated rows stay readable.
+func (p *Provider) DecryptValue(ciphertext []byte, keyID string) (string, error) {
+	key, err := p.master.Key(keyID)
+	if err != nil {
+		return "", err
+	}
+	enc, err := crypto.NewKeyedEncryptor(key)
+	if err != nil {
+		return "", err
+	}
+	pt, err := enc.Decrypt(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	return string(pt), nil
+}

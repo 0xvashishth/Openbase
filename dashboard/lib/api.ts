@@ -7,6 +7,7 @@ import type {
   Connection,
   FullSchema,
   Function,
+  Invite,
   Organization,
   OrgMember,
   OrgRole,
@@ -14,10 +15,15 @@ import type {
   QueryRowsRequest,
   ResultSet,
   SchemaInfo,
+  SessionView,
   TestConnectionResult,
   Trigger,
   TriggerActionType,
   TriggerEvent,
+  UpdateMailSettings,
+  MailLogEntry,
+  MailSettingsView,
+  TestMailResult,
   User,
   WebhookDelivery,
 } from "./types";
@@ -105,6 +111,37 @@ export const api = {
   login: (email: string, password: string) =>
     request<AuthResponse>("POST", "/v1/auth/login", { email, password }),
   me: (token: string) => request<User>("GET", "/v1/me", undefined, token),
+  updateMe: (token: string, patch: { full_name?: string }) =>
+    request<User>("PATCH", "/v1/me", patch, token),
+  changePassword: (token: string, current: string, next: string) =>
+    request<{ status: string }>("POST", "/v1/me/password", {
+      current_password: current,
+      new_password: next,
+    }, token),
+  listMySessions: (token: string) =>
+    request<SessionView[]>("GET", "/v1/me/sessions", undefined, token),
+  revokeMySession: (token: string, sessionId: string) =>
+    request<{ status: string }>("DELETE", `/v1/me/sessions/${sessionId}`, undefined, token),
+  forgotPassword: (email: string) =>
+    request<{ status: string }>("POST", "/v1/auth/forgot", { email }),
+  resetPassword: (token: string, password: string) =>
+    request<{ status: string }>("POST", "/v1/auth/reset", { token, password }),
+
+  // Platform mail settings (Phase 9.2, owner-gated). The SMTP password is
+  // write-only and never returned.
+  getMailSettings: (token: string) =>
+    request<MailSettingsView>("GET", "/v1/admin/mail/settings", undefined, token),
+  updateMailSettings: (token: string, body: UpdateMailSettings) =>
+    request<MailSettingsView>("PUT", "/v1/admin/mail/settings", body, token),
+  testMailSend: (token: string, to: string) =>
+    request<TestMailResult>("POST", "/v1/admin/mail/test", { to }, token),
+  listMailLog: (token: string, limit?: number) =>
+    request<MailLogEntry[]>(
+      "GET",
+      `/v1/admin/mail/log${limit ? `?limit=${limit}` : ""}`,
+      undefined,
+      token
+    ),
 
   // Organizations.
   listOrgs: (token: string) =>
@@ -238,8 +275,22 @@ export const api = {
     request<{ role: OrgRole }>(
       "PATCH", `/v1/orgs/${orgId}/members/${userId}`, { role }, token
     ),
-removeMember: (token: string, orgId: string, userId: string) =>
+  removeMember: (token: string, orgId: string, userId: string) =>
     request<{ left: boolean }>("DELETE", `/v1/orgs/${orgId}/members/${userId}`, undefined, token),
+
+  // Invites (Phase 9.7).
+  listInvites: (token: string, orgId: string) =>
+    request<Invite[]>("GET", `/v1/orgs/${orgId}/invites`, undefined, token),
+  createInvite: (token: string, orgId: string, email: string, role: OrgRole) =>
+    request<Invite>("POST", `/v1/orgs/${orgId}/invites`, { email, role }, token),
+  revokeInvite: (token: string, orgId: string, inviteId: string) =>
+    request<{ status: string }>("DELETE", `/v1/orgs/${orgId}/invites/${inviteId}`, undefined, token),
+  acceptInvite: (token: string, inviteToken: string, password?: string, fullName?: string) =>
+    request<{ status: string; org_id: string }>("POST", `/v1/invites/accept`, {
+      token: inviteToken,
+      password,
+      full_name: fullName,
+    }, token),
 
   transferOwnership: (token: string, orgId: string, userId: string, demote?: boolean) => {
     return request<{ transferred_to: string; demote: boolean }>(
