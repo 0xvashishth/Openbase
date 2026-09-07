@@ -507,6 +507,10 @@ Fix the timing oracle in login — the "no such user" branch skips bcrypt entire
 **9.4 — Account settings UI.** `/account`: profile (`full_name` is currently write-once at
 registration), email, password, sessions/devices list with revoke, delete account.
 
+> *Shipped (partial):* `/account` with profile editing (`full_name`), change password, and active
+> sessions list with revoke (Phase 9.4 + 9.3 change-password endpoint). *Remaining:* email change,
+> delete account.
+
 **9.5 — Dashboard SSO.** GitHub + Google OAuth for *platform* login, `identities` table, account
 linking. SAML behind a build flag (stretch).
 

@@ -14,6 +14,7 @@ import type {
   QueryRowsRequest,
   ResultSet,
   SchemaInfo,
+  SessionView,
   TestConnectionResult,
   Trigger,
   TriggerActionType,
@@ -109,6 +110,17 @@ export const api = {
   login: (email: string, password: string) =>
     request<AuthResponse>("POST", "/v1/auth/login", { email, password }),
   me: (token: string) => request<User>("GET", "/v1/me", undefined, token),
+  updateMe: (token: string, patch: { full_name?: string }) =>
+    request<User>("PATCH", "/v1/me", patch, token),
+  changePassword: (token: string, current: string, next: string) =>
+    request<{ status: string }>("POST", "/v1/me/password", {
+      current_password: current,
+      new_password: next,
+    }, token),
+  listMySessions: (token: string) =>
+    request<SessionView[]>("GET", "/v1/me/sessions", undefined, token),
+  revokeMySession: (token: string, sessionId: string) =>
+    request<{ status: string }>("DELETE", `/v1/me/sessions/${sessionId}`, undefined, token),
   forgotPassword: (email: string) =>
     request<{ status: string }>("POST", "/v1/auth/forgot", { email }),
   resetPassword: (token: string, password: string) =>

@@ -279,11 +279,19 @@ type Store interface {
 	RecordMailLog(ctx context.Context, e *MailLog) error
 	ListMailLog(ctx context.Context, limit int) ([]MailLog, error)
 
+	// Sessions (Phase 9.1 refresh tokens).
+	CreateSession(ctx context.Context, ses *Session) error
+	GetSessionByHash(ctx context.Context, hash string) (*Session, error)
+	RevokeSession(ctx context.Context, id string) error
+	RevokeUserSessions(ctx context.Context, userID string) error
+	ListSessions(ctx context.Context, userID string) ([]Session, error)
+
 	// Password reset tokens (Phase 9.3 credential lifecycle).
 	CreateResetPasswordToken(ctx context.Context, userID string, ttl time.Duration) (string, *ResetPasswordToken, error)
 	GetResetPasswordToken(ctx context.Context, hash string) (*ResetPasswordToken, error)
 	MarkResetPasswordTokenUsed(ctx context.Context, id string) error
 	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+	UpdateUserProfile(ctx context.Context, userID, fullName string) error
 
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error

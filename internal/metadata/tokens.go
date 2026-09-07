@@ -74,3 +74,11 @@ func (s *Postgres) SetUserPassword(ctx context.Context, userID, passwordHash str
 		userID, passwordHash)
 	return mapError(err)
 }
+
+// UpdateUserProfile updates mutable profile fields (currently only full_name).
+func (s *Postgres) UpdateUserProfile(ctx context.Context, userID, fullName string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users SET full_name = $2, updated_at = now() WHERE id = $1`,
+		userID, fullName)
+	return mapError(err)
+}

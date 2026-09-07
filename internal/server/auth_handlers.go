@@ -202,3 +202,138 @@ func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// SessionView is what the dashboard sees — never the refresh-token hash.
+type SessionView struct {
+	ID        string    `json:"id"`
+	UserAgent string    `json:"user_agent"`
+	IP        string    `json:"ip"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+}
+
+// listMySessions lists all sessions for the authenticated user.
+func (s *Server) listMySessions(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromContext(r.Context())
+	sessions, err := s.svc.Store.ListSessions(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	out := make([]SessionView, len(sessions))
+	for i, sess := range sessions {
+		out[i] = SessionView{
+			ID:        sess.ID,
+			UserAgent: sess.UserAgent,
+			IP:        sess.IP,
+			CreatedAt: sess.CreatedAt,
+			ExpiresAt: sess.ExpiresAt,
+			RevokedAt: sess.RevokedAt,
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// revokeMySession revokes a specific session owned by the authenticated user.
+// Users can only revoke their own sessions.
+func (s *Server) revokeMySession(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromContext(r.Context())
+	sessionID := r.PathValue("sessionID")
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "session id required")
+		return
+	}
+	// Verify ownership: only allow revoking sessions belonging to the caller.
+	sessions, err := s.svc.Store.ListSessions(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	owns := false
+	for _, sess := range sessions {
+		if sess.ID == sessionID {
+			owns = true
+			break
+		}
+	}
+	if !owns {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if err := s.svc.Store.RevokeSession(r.Context(), sessionID); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+// changePasswordRequest is the POST body for /v1/me/password.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// changePassword updates the authenticated user's password after verifying
+// their current password. Other sessions are revoked on success.
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current and new password are required")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+	uid := userIDFromContext(r.Context())
+	u, err := s.svc.Store.GetUserByID(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if !auth.VerifyPassword(u.PasswordHash, req.CurrentPassword) {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if err := s.svc.Store.SetUserPassword(r.Context(), uid, hash); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// updateProfileRequest is the PATCH body for /v1/me.
+type updateProfileRequest struct {
+	FullName string `json:"full_name"`
+}
+
+// updateProfile updates mutable profile fields (currently only full_name).
+func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
+	var req updateProfileRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	uid := userIDFromContext(r.Context())
+	u, err := s.svc.Store.GetUserByID(r.Context(), uid)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	u.FullName = req.FullName
+	if err := s.svc.Store.UpdateUserProfile(r.Context(), u.ID, u.FullName); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}

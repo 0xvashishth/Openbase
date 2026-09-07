@@ -218,6 +218,10 @@ func New(svc *Services) Handler {
 	mux.HandleFunc("GET /metrics", s.metrics)
 
 	mux.Handle("GET /v1/me", s.requireAuth(http.HandlerFunc(s.me)))
+	mux.Handle("PATCH /v1/me", s.requireAuth(http.HandlerFunc(s.updateProfile)))
+	mux.Handle("POST /v1/me/password", s.requireAuth(http.HandlerFunc(s.changePassword)))
+	mux.Handle("GET /v1/me/sessions", s.requireAuth(http.HandlerFunc(s.listMySessions)))
+	mux.Handle("DELETE /v1/me/sessions/{sessionID}", s.requireAuth(http.HandlerFunc(s.revokeMySession)))
 
 	mux.Handle("POST /v1/orgs", s.requireAuth(http.HandlerFunc(s.createOrg)))
 	mux.Handle("GET /v1/orgs", s.requireAuth(http.HandlerFunc(s.listOrgs)))

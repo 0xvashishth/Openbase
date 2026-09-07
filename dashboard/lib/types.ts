@@ -14,6 +14,15 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface SessionView {
+  id: string;
+  user_agent: string;
+  ip: string;
+  created_at: string;
+  expires_at: string;
+  revoked_at?: string;
+}
+
 export type OrgRole = "owner" | "admin" | "member";
 
 export interface OrgMember {
