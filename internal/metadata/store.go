@@ -338,3 +338,5 @@ type AuditEvent struct {
 	UserAgent       string         `json:"user_agent,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 }
+
+
