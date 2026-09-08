@@ -53,6 +53,17 @@
     --page-max-width: 1200px;
     --card-padding: 24px;
     --element-gap: 8px;
+
+    /* --- Safe Area (Mobile PWA) ------------------------------------------- */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    /* --- Mobile Layout Tokens --------------------------------------------- */
+    --mobile-topbar-height: 48px;
+    --mobile-bottombar-height: 56px;
+    --mobile-sheet-width: 280px;
   }
 
   /* -------------------------------------------------------------------------
@@ -187,4 +198,58 @@
   100% {
     transform: translateX(300%);
   }
+}
+
+/* Mobile PWA Utilities ------------------------------------------------------ */
+@layer utilities {
+  .pt-safe { padding-top: var(--safe-top); }
+  .pr-safe { padding-right: var(--safe-right); }
+  .pb-safe { padding-bottom: var(--safe-bottom); }
+  .pl-safe { padding-left: var(--safe-left); }
+  .px-safe { padding-left: var(--safe-left); padding-right: var(--safe-right); }
+  .py-safe { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+
+  .mt-safe { margin-top: var(--safe-top); }
+  .mr-safe { margin-right: var(--safe-right); }
+  .mb-safe { margin-bottom: var(--safe-bottom); }
+  .ml-safe { margin-left: var(--safe-left); }
+
+  .top-safe { top: var(--safe-top); }
+  .right-safe { right: var(--safe-right); }
+  .bottom-safe { bottom: var(--safe-bottom); }
+  .left-safe { left: var(--safe-left); }
+
+  .h-mobile-topbar { height: var(--mobile-topbar-height); }
+  .h-mobile-bottombar { height: var(--mobile-bottombar-height); }
+  .w-mobile-sheet { width: var(--mobile-sheet-width); }
+
+  .min-h-screen-safe { min-height: calc(100vh - var(--safe-top) - var(--safe-bottom)); }
+  .h-screen-safe { height: calc(100vh - var(--safe-top) - var(--safe-bottom)); }
+
+  .pb-bottombar-safe { padding-bottom: calc(var(--mobile-bottombar-height) + var(--safe-bottom)); }
+
+  .touch-target { min-height: 48px; min-width: 48px; }
+  .touch-target-comfort { min-height: 56px; min-width: 56px; }
+
+  .tap-highlight-transparent { -webkit-tap-highlight-color: transparent; }
+  .tap-highlight-accent { -webkit-tap-highlight-color: rgb(var(--color-acid-lime) / 0.3); }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  .animate-in { animation: animate-in 0.2s ease-out; }
+  .animate-out { animation: animate-out 0.15s ease-in; }
+}
+
+@keyframes animate-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes animate-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(8px); }
 }

@@ -122,8 +122,8 @@ export function MembersPanel() {
       return;
     }
     setAdding(true);
+    const token = authToken();
     try {
-      const token = authToken();
       if (!token) throw new Error("Not authenticated");
       // First try adding as an existing user
       await api.addMember(token, orgId, email, addRole);
@@ -136,6 +136,7 @@ export function MembersPanel() {
       if (err instanceof ApiError && err.status === 404) {
         // User not found — send an invite instead
         try {
+          if (!token) throw err;
           await api.createInvite(token, orgId, email, addRole);
           toast.success("Invite sent to " + email + "; recipient sets password & joins");
         } catch (invErr) {

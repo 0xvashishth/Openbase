@@ -2,18 +2,22 @@
 
 import { usePathname } from "next/navigation";
 import * as React from "react";
-import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { parseRoute } from "./nav";
 import { PlatformSidebar } from "./PlatformSidebar";
 import { OrgSidebar } from "./OrgSidebar";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { Topbar } from "./Topbar";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { StatusBar } from "./StatusBar";
 import { OrgProvider, useOrg } from "@/lib/org-context";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { cn } from "@/lib/utils";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { MobileTopbar } from "./mobile/MobileTopbar";
+import { MobileBottomNav } from "./mobile/MobileBottomNav";
+import { MobileSheet, MobileSheetProvider } from "./mobile/MobileSheet";
+import { MobilePageShell } from "./mobile/MobilePageShell";
+import { MobileStatusBar } from "./mobile/MobileStatusBar";
+import { MobileLayout } from "./mobile/MobilePageShell";
 
 /**
  * Thin top progress bar shown briefly after every route change so sidebar /
@@ -115,50 +119,50 @@ function ProjectChrome({
   orgName?: string;
   orgLoading?: boolean;
 }) {
-  const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-  React.useEffect(() => setMobileOpen(false), [currentPath]);
   return (
-    <div className="flex h-full flex-col">
-      <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
-      <ProjectTopbar orgName={orgName} orgLoading={orgLoading} />
-      <div className="flex min-h-0 flex-1">
-        <aside
-          className={cn(
-            "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
-            collapsed ? "w-16" : "w-60"
-          )}
-        >
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ProjectSidebarConnected currentPath={currentPath} collapsed={collapsed} />
-          </div>
-          <div className="border-t border-border p-2">
-            <button
-              onClick={() => setCollapsed((v) => !v)}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          </div>
-        </aside>
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="w-72 p-0 md:hidden">
-            <ProjectSidebarConnected currentPath={currentPath} collapsed={false} />
-          </SheetContent>
-        </Sheet>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b border-border p-2 md:hidden">
-            <Button variant="ghost" size="sm" onClick={() => setMobileOpen(true)}>
-              <Menu className="h-4 w-4" /> Menu
-            </Button>
-          </div>
-          <main className="flex-1 overflow-y-auto bg-background">{children}</main>
+    <MobileSheetProvider>
+      <MobileLayout>
+        <MobileStatusBar />
+        {/* Desktop status bar: hidden below md so the mobile topbar owns the viewport. */}
+        <div className="hidden md:block">
+          <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
         </div>
-      </div>
-    </div>
+        <MobileTopbar />
+        {/* Desktop header: hidden below md; mobile uses MobileTopbar + bottom nav. */}
+        <div className="hidden md:block">
+          <ProjectTopbar orgName={orgName} orgLoading={orgLoading} />
+        </div>
+        <div className="flex min-h-0 flex-1">
+          <aside
+            className={cn(
+              "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
+              collapsed ? "w-16" : "w-60"
+            )}
+          >
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ProjectSidebarConnected currentPath={currentPath} collapsed={collapsed} />
+            </div>
+            <div className="border-t border-border p-2">
+              <button
+                onClick={() => setCollapsed((v) => !v)}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-expanded={!collapsed}
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </button>
+            </div>
+          </aside>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <MobilePageShell>{children}</MobilePageShell>
+          </div>
+        </div>
+        <MobileBottomNav />
+        <MobileSheet />
+      </MobileLayout>
+    </MobileSheetProvider>
   );
 }
 
@@ -181,10 +185,7 @@ function ShellChrome({
   projectLoading?: boolean;
   children: React.ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-
-  React.useEffect(() => setMobileOpen(false), [currentPath]);
 
   // Inject the rail state into whatever sidebar element was provided
   // (PlatformSidebar / OrgSidebar). They accept an optional `collapsed` prop;
@@ -197,44 +198,46 @@ function ShellChrome({
       : sidebar;
 
   return (
-    <div className="flex h-full flex-col">
-      <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
-      <Topbar orgName={orgName} orgLoading={orgLoading} projectName={projectName} projectLoading={projectLoading} />
-      <div className="flex min-h-0 flex-1">
-        <aside
-          className={cn(
-            "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
-            collapsed ? "w-16" : "w-60"
-          )}
-        >
-          <div className="flex-1 min-h-0 overflow-hidden">{renderSidebar(collapsed)}</div>
-          <div className="border-t border-border p-2">
-            <button
-              onClick={() => setCollapsed((v) => !v)}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          </div>
-        </aside>
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="w-72 p-0 md:hidden">
-            {renderSidebar(false)}
-          </SheetContent>
-        </Sheet>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b border-border p-2 md:hidden">
-            <Button variant="ghost" size="sm" onClick={() => setMobileOpen(true)}>
-              <Menu className="h-4 w-4" /> Menu
-            </Button>
-          </div>
-          <main className="flex-1 overflow-y-auto bg-background">{children}</main>
+    <MobileSheetProvider>
+      <MobileLayout>
+        <MobileStatusBar />
+        {/* Desktop status bar: hidden below md so the mobile topbar owns the viewport. */}
+        <div className="hidden md:block">
+          <StatusBar orgId={orgId} orgName={orgName} orgLoading={orgLoading} />
         </div>
-      </div>
-    </div>
+        <MobileTopbar />
+        {/* Desktop header: hidden below md; mobile uses MobileTopbar + bottom nav. */}
+        <div className="hidden md:block">
+          <Topbar orgName={orgName} orgLoading={orgLoading} projectName={projectName} projectLoading={projectLoading} />
+        </div>
+        <div className="flex min-h-0 flex-1">
+          <aside
+            className={cn(
+              "hidden shrink-0 flex-col border-r border-border bg-card transition-all md:flex",
+              collapsed ? "w-16" : "w-60"
+            )}
+          >
+            <div className="flex-1 min-h-0 overflow-hidden">{renderSidebar(collapsed)}</div>
+            <div className="border-t border-border p-2">
+              <button
+                onClick={() => setCollapsed((v) => !v)}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-expanded={!collapsed}
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="flex w-full items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </button>
+            </div>
+          </aside>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <MobilePageShell>{children}</MobilePageShell>
+          </div>
+        </div>
+        <MobileBottomNav />
+        <MobileSheet />
+      </MobileLayout>
+    </MobileSheetProvider>
   );
 }
 
