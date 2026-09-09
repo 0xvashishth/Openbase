@@ -78,6 +78,27 @@ The platform needs its own database to track users, organizations, projects, and
 - Each provisioned project database runs as its own container, one container per project per the "dedicated instance" model already decided on.
 - Design the container orchestration piece behind an interface too (`ProvisionerInterface`) so Docker Compose can later be swapped for Kubernetes without a rewrite, when/if a cloud-hosted multi-tenant version is built.
 
+### 2.8 End-user identity placement (Phase 10 decision — settled)
+
+The customer's *application users* (`project_users`, SDK `auth.*`) live in the
+**platform metadata DB, keyed by `project_id`** (migration `0008`, package
+`internal/projectauth`). Rationale:
+
+- Works uniformly across all six engines and leaves BYODB databases untouched
+  (no `openbase_auth` schema written into a user's own database).
+- One code path for signup/session/JWKS regardless of the project's engine —
+  the adapter layer never sees identity.
+- Cost (acknowledged): native in-database RLS pushdown is impossible where the
+  identity is invisible to the engine. Postgres/MySQL projects that need
+  uncircumventable row security can opt into a later "native auth" mode
+  (`openbase_auth` schema inside the project DB, behind a new
+  `SupportsNativeAuth` capability). Until then every project is Tier B
+  (platform-side enforcement, see `PHASES.md` ground rule 3) and the UI must say so.
+- Each project mints its own **asymmetric (ES256) signing keys**
+  (`project_signing_keys`, JWKS at `GET /v1/projects/{id}/.well-known/jwks.json`);
+  the shared HS256 operator secret (`internal/auth`) is never used for end-user
+  tokens and is never exposed for third-party verification.
+
 ## 3. Why not Node.js/TypeScript for the whole backend?
 
 It's a completely viable alternative and would maximize "one language across the whole stack" simplicity (dashboard + backend both TS). The tradeoff is concurrency/performance headroom for the adapter engine specifically, which is the part of the system most likely to become a bottleneck as more databases and more concurrent projects are added. If team familiarity with Go is a concern, a reasonable middle path is: **dashboard + API gateway in TypeScript/Node, Adapter Engine in Go as a separate service communicating via gRPC.** This still isolates the performance-critical piece.
