@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { authToken } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type ApiHealth = "checking" | "operational" | "degraded" | "down";
 
@@ -105,7 +111,7 @@ const label: Record<ApiHealth, string> = {
   down: "Unreachable",
 };
 
-/** Compact status pill for the slim top bar, with per-API breakdown in title. */
+/** Compact status pill for the slim top bar, with per-API breakdown in a tooltip. */
 export function ApiStatus() {
   const { health, latency, checks } = useApiStatus();
   return <ApiStatusBadge health={health} latency={latency} checks={checks} />;
@@ -120,22 +126,47 @@ export function ApiStatusBadge({
   latency: number | null;
   checks: ApiCheck[];
 }) {
-  const title =
-    checks.length > 0
-      ? checks.map((c) => `${c.label}: ${c.ok ? `${c.ms}ms` : "failing"}`).join(" · ")
-      : "Probing platform APIs…";
   return (
-    <span
-      role="status"
-      aria-label={`API status: ${label[health]}${latency != null ? `, ${latency} milliseconds` : ""}`}
-      title={title}
-      className="inline-flex items-center gap-1.5 whitespace-nowrap text-label text-muted-foreground"
-    >
-      <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot[health])} />
-      {label[health]}
-      {health === "operational" && latency != null && (
-        <span className="font-mono tabular-nums">{latency}ms</span>
-      )}
-    </span>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            role="status"
+            tabIndex={0}
+            aria-label={`API status: ${label[health]}`}
+            className="inline-flex cursor-default items-center gap-1.5 whitespace-nowrap text-label text-muted-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot[health])} />
+            {label[health]}
+            {health === "operational" && latency != null && (
+              <span className="font-mono tabular-nums">{latency}ms</span>
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="min-w-44">
+          {checks.length > 0 ? (
+            <ul className="space-y-1">
+              {checks.map((c) => (
+                <li key={c.label} className="flex items-center gap-2 text-label">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      c.ok ? "bg-success" : "bg-destructive"
+                    )}
+                  />
+                  <span className="font-w510 text-popover-foreground">{c.label}</span>
+                  <span className="ml-auto font-mono tabular-nums text-muted-foreground">
+                    {c.ok && c.ms != null ? `${c.ms}ms` : "failing"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="text-label text-muted-foreground">Probing platform APIs…</span>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
