@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   LogOut,
   ChevronRight,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseRoute, PROJECT_TOOL_META, projectToolPath, type ProjectToolSection } from "../nav";
@@ -251,13 +252,15 @@ function MobileSheetContent() {
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="left" className="w-mobile-sheet max-w-[85vw] p-0 pb-safe pt-safe md:hidden">
         <div className="flex h-full flex-col">
-          <div className="flex h-12 items-center justify-between px-4 border-b border-border">
-            <h2 className="text-heading font-w510">Menu</h2>
-            <SheetClose asChild>
-              <Button variant="ghost" size="icon" className="touch-target" onClick={() => selection()}>
-                <span className="sr-only">Close menu</span>
-              </Button>
-            </SheetClose>
+          <div className="flex h-12 items-center gap-2 border-b border-border px-4">
+            <span
+              aria-hidden
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-foreground-strong text-label font-w590 text-background"
+            >
+              O
+            </span>
+            <h2 className="text-body-emphasis font-w510 text-foreground-strong">Openbase</h2>
+            <span className="sr-only">Navigation drawer</span>
           </div>
           <div className="flex-1 overflow-y-auto">{renderContent()}</div>
           <div className="border-t border-border p-4 space-y-2">
@@ -291,6 +294,7 @@ export function MobileSheetTrigger() {
       onClick={() => { light(); setOpen(true); }}
       aria-label="Open menu"
     >
+      <Menu className="h-5 w-5 text-foreground-strong" aria-hidden />
       <span className="sr-only">Open menu</span>
     </Button>
   );

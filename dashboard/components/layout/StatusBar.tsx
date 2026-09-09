@@ -44,7 +44,7 @@ export function StatusBar({
         >
           <span
             aria-hidden
-            className="flex h-4 w-4 items-center justify-center rounded-sm bg-foreground-strong text-micro font-w510 text-background"
+            className="flex h-4 w-4 items-center justify-center rounded-sm bg-foreground-strong text-micro font-w590 text-background"
           >
             O
           </span>

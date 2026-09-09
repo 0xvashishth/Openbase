@@ -74,7 +74,7 @@ describe("MobileBottomNav", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "More" }));
     await waitFor(() => {
-      expect(screen.getByRole("menuitem")).toBeInTheDocument();
+      expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0);
     });
   });
 });
@@ -95,7 +95,7 @@ describe("MobileTopbar", () => {
     );
     expect(screen.getByRole("banner").className).toMatch(/md:hidden/);
     expect(screen.getByRole("button", { name: "Open menu" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Search/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
   });
 });

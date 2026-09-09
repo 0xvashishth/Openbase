@@ -6,9 +6,10 @@ import { PageShell } from "@/components/layout/PageShell";
 export default function AccountPage() {
   return (
     <PageShell>
-      <p className="mb-4 text-caption text-muted-foreground">
-        Profile, password, and active sessions.
-      </p>
+      <div className="mb-5">
+        <h1 className="text-heading font-w510 text-foreground-strong">Account settings</h1>
+        <p className="mt-1 text-caption text-muted-foreground">Manage your profile, security, and active sessions.</p>
+      </div>
       <AccountPanel />
     </PageShell>
   );

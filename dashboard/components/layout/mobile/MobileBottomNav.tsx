@@ -13,10 +13,15 @@ import {
   KeyRound,
   Settings,
   Users,
-  Mail,
   UserCircle,
   MoreHorizontal,
+  Network,
+  Zap,
+  Database,
+  Radio,
+  Plug,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseRoute, projectToolPath } from "../nav";
 import { useOrgList, useProjectList } from "../switchers";
@@ -39,16 +44,16 @@ interface BottomNavItem {
   badge?: string;
 }
 
-function getPlatformItems(pathname: string, orgs: any[]): BottomNavItem[] {
+function getPlatformItems(pathname: string): BottomNavItem[] {
   return [
     { label: "Orgs", icon: <Building2 className="h-5 w-5" />, href: "/orgs", active: pathname === "/orgs" || pathname.startsWith("/orgs/") },
     { label: "Projects", icon: <FolderKanban className="h-5 w-5" />, href: "/projects", active: pathname.startsWith("/projects") },
-    { label: "Settings", icon: <Mail className="h-5 w-5" />, href: "/settings/email", active: pathname.startsWith("/settings/email") },
+    { label: "Settings", icon: <Settings className="h-5 w-5" />, href: "/settings/email", active: pathname.startsWith("/settings/email") },
     { label: "Account", icon: <UserCircle className="h-5 w-5" />, href: "/account", active: pathname.startsWith("/account") },
   ];
 }
 
-function getOrgItems(pathname: string, orgId: string, orgName: string, projects: any[]): BottomNavItem[] {
+function getOrgItems(pathname: string, orgId: string): BottomNavItem[] {
   const base = `/orgs/${orgId}`;
   return [
     { label: "Projects", icon: <FolderKanban className="h-5 w-5" />, href: base, active: pathname === base },
@@ -58,19 +63,52 @@ function getOrgItems(pathname: string, orgId: string, orgName: string, projects:
   ];
 }
 
-function getProjectItems(pathname: string, orgId: string, projectId: string, projectName: string): BottomNavItem[] {
+function getProjectItems(pathname: string, orgId: string, projectId: string): BottomNavItem[] {
   const base = `/orgs/${orgId}/projects/${projectId}`;
   const tool = pathname.split(`/projects/${projectId}`)[1]?.replace(/^\//, "") || "overview";
 
+  const icons: Record<string, LucideIcon> = {
+    overview: Home,
+    tables: Table2,
+    schema: Network,
+    sql: SquareTerminal,
+    connect: Cable,
+    api: KeyRound,
+    functions: Zap,
+    triggers: Database,
+    realtime: Radio,
+    "db-source": Plug,
+    settings: Settings,
+  };
+  const labels: Record<string, string> = {
+    overview: "Overview",
+    tables: "Tables",
+    schema: "Schema",
+    sql: "SQL",
+    connect: "Connect",
+    api: "API Keys",
+    functions: "Functions",
+    triggers: "Triggers",
+    realtime: "Realtime",
+    "db-source": "DB Source",
+    settings: "Settings",
+  };
   const primaryTools = [
     { slug: "overview", label: "Overview", icon: Home, active: tool === "overview" },
     { slug: "tables", label: "Tables", icon: Table2, active: tool === "tables" },
     { slug: "sql", label: "SQL", icon: SquareTerminal, active: tool === "sql" },
     { slug: "connect", label: "Connect", icon: Cable, active: tool === "connect" },
-    { slug: "api", label: "API Keys", icon: KeyRound, active: tool === "api" },
   ];
+  const allTools = primaryTools.concat(
+    ["api", "schema", "functions", "triggers", "realtime", "db-source", "settings"].map((slug) => ({
+      slug,
+      label: labels[slug],
+      icon: icons[slug],
+      active: tool === slug,
+    }))
+  );
 
-  return primaryTools.map((t) => ({
+  return allTools.map((t) => ({
     label: t.label,
     icon: <t.icon className="h-5 w-5" />,
     href: projectToolPath(orgId, projectId, t.slug),
@@ -90,13 +128,11 @@ export function MobileBottomNav() {
   let moreItems: BottomNavItem[] = [];
 
   if (route.scope === "platform") {
-    items = getPlatformItems(pathname, orgs ?? []);
+    items = getPlatformItems(pathname);
   } else if (route.scope === "org" && route.orgId) {
-    const org = orgs?.find((o) => o.id === route.orgId);
-    items = getOrgItems(pathname, route.orgId, org?.name ?? "", projects ?? []);
+    items = getOrgItems(pathname, route.orgId);
   } else if (route.scope === "project" && route.orgId && route.projectId) {
-    const project = projects?.find((p) => p.id === route.projectId);
-    const allProjectItems = getProjectItems(pathname, route.orgId, route.projectId, project?.name ?? "");
+    const allProjectItems = getProjectItems(pathname, route.orgId, route.projectId);
     items = allProjectItems.slice(0, 4);
     moreItems = allProjectItems.slice(4);
   }

@@ -9,6 +9,8 @@ import { SegmentedOption } from "@/components/ui/segmented";
 import { ToolPageSkeleton } from "@/components/ui/skeletons";
 import { useToast } from "@/components/ui/toast";
 import type { MailLogEntry, MailProvider, MailSettingsView } from "@/lib/types";
+import { useOrgList } from "@/components/layout/switchers";
+import Link from "next/link";
 
 /**
  * Platform Email settings (Phase 9.2): the operator's own mail provider
@@ -35,6 +37,7 @@ export function EmailSettingsPanel() {
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; provider: string; error?: string } | null>(null);
+  const { orgs, loading: orgsLoading } = useOrgList(true);
 
   async function load() {
     const token = authToken();
@@ -125,6 +128,15 @@ export function EmailSettingsPanel() {
   }
 
   if (forbidden) {
+    if (!orgsLoading && orgs?.length === 0) {
+      return (
+        <EmptyState
+          title="Create an organization first"
+          hint="Email settings belong to your Openbase workspace. Create an organization before configuring verification, reset, and invite emails."
+          action={<Link href="/orgs" className="text-caption font-w510 text-primary underline-offset-2 hover:underline">Create organization</Link>}
+        />
+      );
+    }
     return (
       <EmptyState
         title="Owner access required"

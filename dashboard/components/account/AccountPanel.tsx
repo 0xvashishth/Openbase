@@ -85,9 +85,12 @@ function AccountPanelInner() {
   }
 
   return (
-    <div className="space-y-8">
-      <section>
-        <h2 className="mb-2 text-heading-sm font-w510 text-foreground-strong">Profile</h2>
+    <div className="space-y-6 sm:space-y-8">
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-heading-sm font-w510 text-foreground-strong max-md:text-body-emphasis">General details</h2>
+          <p className="text-label text-muted-foreground">Your name and sign-in email.</p>
+        </div>
         <form onSubmit={saveProfile} className="space-y-3">
           <div>
             <Label htmlFor="email">Email</Label>
@@ -105,8 +108,11 @@ function AccountPanelInner() {
         </form>
       </section>
 
-      <section>
-        <h2 className="mb-2 text-heading-sm font-w510 text-foreground-strong">Change password</h2>
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-heading-sm font-w510 text-foreground-strong max-md:text-body-emphasis">Security</h2>
+          <p className="text-label text-muted-foreground">Change the password used to sign in.</p>
+        </div>
         <form onSubmit={savePassword} className="space-y-3">
           <div>
             <Label htmlFor="current">Current password</Label>
@@ -135,12 +141,12 @@ function AccountPanelInner() {
         </form>
       </section>
 
-      <section>
-        <h2 className="mb-2 text-heading-sm font-w510 text-foreground-strong">Active sessions</h2>
-        <p className="mb-3 text-body-sm text-muted-foreground">
-          Devices where you are currently signed in. Revoking invalidates the
-          session immediately.
-        </p>
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-heading-sm font-w510 text-foreground-strong max-md:text-body-emphasis">Active sessions</h2>
+          <p className="text-label text-muted-foreground">Devices where you are currently signed in.</p>
+        </div>
+        <p className="text-label text-muted-foreground">Revoking a session invalidates it immediately.</p>
         <div className="space-y-2">
           {sessions.length === 0 && (
             <p className="text-body-sm text-muted-foreground">No active sessions.</p>
@@ -170,7 +176,14 @@ function AccountPanelInner() {
             </div>
           ))}
         </div>
-        <Button variant="ghost" className="mt-3" onClick={logout}>
+      </section>
+
+      <section className="space-y-3 border-t border-border pt-6">
+        <div>
+          <h2 className="mb-1 text-heading-sm font-w510 text-foreground-strong max-md:text-body-emphasis">Danger zone</h2>
+          <p className="text-label text-muted-foreground">End the current session on this device.</p>
+        </div>
+        <Button variant="ghost" onClick={logout}>
           Sign out this device
         </Button>
       </section>
