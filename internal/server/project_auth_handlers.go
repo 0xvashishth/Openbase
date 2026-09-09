@@ -225,24 +225,29 @@ type projectTokenRequest struct {
 func (s *Server) projectToken(w http.ResponseWriter, r *http.Request) {
 	projectID := projectIDFromContext(r.Context())
 	grant := r.URL.Query().Get("grant_type")
+	// NB: the body is decoded per grant below — the grants have different
+	// shapes and the decoder rejects unknown fields.
+	switch grant {
+	case "password":
+		s.projectTokenPassword(w, r, projectID)
+	case "refresh_token":
+		s.projectTokenRefresh(w, r, projectID)
+	case "pkce":
+		s.projectTokenPKCE(w, r, projectID)
+	default:
+		// Explicit 501 (not 404): the grant is planned (magiclink/otp/
+		// id_token arrive with later slices), the server simply doesn't speak
+		// it yet.
+		writeError(w, http.StatusNotImplemented, "grant_type "+grant+" is not yet supported (use password, refresh_token or pkce)")
+	}
+}
+
+func (s *Server) projectTokenPassword(w http.ResponseWriter, r *http.Request, projectID string) {
 	var req projectTokenRequest
 	if err := decodeBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	switch grant {
-	case "password":
-		s.projectTokenPassword(w, r, projectID, req)
-	case "refresh_token":
-		s.projectTokenRefresh(w, r, projectID, req)
-	default:
-		// Explicit 501 (not 404): the grant is planned (magiclink/otp/pkce/
-		// id_token arrive with A2), the server simply doesn't speak it yet.
-		writeError(w, http.StatusNotImplemented, "grant_type "+grant+" is not yet supported (use password or refresh_token)")
-	}
-}
-
-func (s *Server) projectTokenPassword(w http.ResponseWriter, r *http.Request, projectID string, req projectTokenRequest) {
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 	u, err := s.svc.Store.GetProjectUserByEmail(r.Context(), projectID, email)
 	// Timing-oracle defence (mirrors operator login): always run bcrypt.
@@ -271,7 +276,12 @@ func (s *Server) projectTokenPassword(w http.ResponseWriter, r *http.Request, pr
 	writeJSON(w, http.StatusOK, ses)
 }
 
-func (s *Server) projectTokenRefresh(w http.ResponseWriter, r *http.Request, projectID string, req projectTokenRequest) {
+func (s *Server) projectTokenRefresh(w http.ResponseWriter, r *http.Request, projectID string) {
+	var req projectTokenRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if strings.TrimSpace(req.RefreshToken) == "" {
 		writeError(w, http.StatusBadRequest, "refresh_token is required")
 		return
@@ -418,6 +428,11 @@ func (s *Server) projectUpdateUser(w http.ResponseWriter, r *http.Request) {
 		u.Email = &email
 		u.EmailConfirmedAt = nil
 	}
+	// Anonymous upgrade (linkIdentity): credentials on an anon user promote
+	// it to permanent. Email stays unconfirmed until verified.
+	if u.IsAnonymous && u.Email != nil && u.PasswordHash != "" {
+		u.IsAnonymous = false
+	}
 	if err := s.svc.Store.UpdateProjectUser(r.Context(), u); err != nil {
 		s.writeErr(w, err)
 		return
@@ -491,10 +506,11 @@ func (s *Server) projectRecover(w http.ResponseWriter, r *http.Request) {
 }
 
 type projectOTPRequest struct {
-	Email           string         `json:"email"`
-	Phone           string         `json:"phone"`
-	Data            map[string]any `json:"data"`
-	ShouldCreateUser *bool         `json:"should_create_user"`
+	Email            string         `json:"email"`
+	Phone            string         `json:"phone"`
+	Anonymous        bool           `json:"anonymous"`
+	Data             map[string]any `json:"data"`
+	ShouldCreateUser *bool          `json:"should_create_user"`
 }
 
 func (s *Server) projectOTP(w http.ResponseWriter, r *http.Request) {
@@ -502,6 +518,21 @@ func (s *Server) projectOTP(w http.ResponseWriter, r *http.Request) {
 	var req projectOTPRequest
 	if err := decodeBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Anonymous sign-in: no credentials, auto-upgradable via PUT /user.
+	if req.Anonymous && req.Email == "" && req.Phone == "" {
+		u := &metadata.ProjectUser{ProjectID: projectID, IsAnonymous: true, UserMetadata: req.Data}
+		if err := s.svc.Store.CreateProjectUser(r.Context(), u); err != nil {
+			s.writeErr(w, err)
+			return
+		}
+		ses, err := s.issueProjectSession(r, projectID, u)
+		if err != nil {
+			s.writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, ses)
 		return
 	}
 	email := strings.TrimSpace(strings.ToLower(req.Email))
@@ -539,9 +570,9 @@ func (s *Server) projectOTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.sendProjectCode(r, projectID, u, kind, mail.TemplateVerifyEmail, "1 hour")
 	} else {
-		// Phone delivery needs the A2 SMS provider; the code row + 200 keep
-		// the contract stable until sending is wired (honest 501 would break
-		// the SDK's signInWithOtp shape, so we record and document instead).
+		// Phone OTP: numeric code via the project's SMS driver (log fallback
+		// records instead of delivering when unconfigured — the UI must say
+		// so; see smsProviderFor).
 		u, err = s.svc.Store.GetProjectUserByPhone(r.Context(), projectID, phone)
 		if err != nil && !errors.Is(err, metadata.ErrNotFound) {
 			s.writeErr(w, err)
@@ -555,13 +586,14 @@ func (s *Server) projectOTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if u != nil {
-			plaintext, hash, cerr := newOpaqueCode(16)
+			plaintext, hash, cerr := newNumericCode(6)
 			if cerr == nil {
 				_ = s.svc.Store.CreateProjectAuthCode(r.Context(), &metadata.ProjectAuthCode{
 					ProjectID: projectID, UserID: u.ID, Kind: metadata.AuthCodeOTPPhone,
 					TokenHash: hash, ExpiresAt: time.Now().Add(10 * time.Minute),
 				})
-				_ = plaintext // delivered via SMS once the A2 provider lands
+				_ = s.smsProviderFor(r.Context(), projectID).Send(r.Context(), phone,
+					"Your Openbase verification code is "+plaintext)
 			}
 		}
 	}

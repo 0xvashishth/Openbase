@@ -356,3 +356,68 @@ func TestProjectAuthCodesSingleUse(t *testing.T) {
 		t.Fatal("revoked code must miss")
 	}
 }
+
+func TestProjectAuthProvidersAndOAuthStates(t *testing.T) {
+	s := setup(t)
+	ctx := context.Background()
+	pID := setupProject(t, s)
+
+	// Provider upsert / get / list / delete.
+	p := &ProjectAuthProvider{ProjectID: pID, Provider: "github", Enabled: true,
+		ClientID: "cid", ClientSecretEncrypted: []byte("enc"), EncryptionKeyID: "k1",
+		Config: map[string]any{"scopes": "read:user"}}
+	if err := s.UpsertProjectAuthProvider(ctx, p); err != nil {
+		t.Fatalf("UpsertProjectAuthProvider: %v", err)
+	}
+	got, err := s.GetProjectAuthProvider(ctx, pID, "github")
+	if err != nil || got.ClientID != "cid" || got.Config["scopes"] != "read:user" {
+		t.Fatalf("GetProjectAuthProvider: %+v %v", got, err)
+	}
+	p.ClientID = "cid2"
+	if err := s.UpsertProjectAuthProvider(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetProjectAuthProvider(ctx, pID, "github")
+	if got.ClientID != "cid2" {
+		t.Fatal("upsert must replace")
+	}
+	listed, err := s.ListProjectAuthProviders(ctx, pID)
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("list providers: %d %v", len(listed), err)
+	}
+	if err := s.DeleteProjectAuthProvider(ctx, pID, "github"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetProjectAuthProvider(ctx, pID, "github"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted provider must miss, got %v", err)
+	}
+
+	// OAuth states: create → attach → consume once.
+	st := &ProjectOAuthState{ProjectID: pID, Provider: "github", StateHash: "st-hash-1",
+		RedirectTo: "https://app.example.com/cb", CodeChallenge: "verifier-abc",
+		CodeChallengeMethod: "plain", ExpiresAt: time.Now().Add(10 * time.Minute)}
+	if err := s.CreateOAuthState(ctx, st); err != nil {
+		t.Fatalf("CreateOAuthState: %v", err)
+	}
+	u := &ProjectUser{ProjectID: pID, Email: strptr("oauth@example.com")}
+	if err := s.CreateProjectUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachOAuthCode(ctx, st.ID, u.ID, "code-hash-1"); err != nil {
+		t.Fatalf("AttachOAuthCode: %v", err)
+	}
+	// Second attach loses (already has a code).
+	if err := s.AttachOAuthCode(ctx, st.ID, u.ID, "code-hash-2"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("double attach must miss, got %v", err)
+	}
+	consumed, err := s.ConsumeOAuthCode(ctx, "code-hash-1")
+	if err != nil || consumed.UserID == nil || *consumed.UserID != u.ID {
+		t.Fatalf("ConsumeOAuthCode: %+v %v", consumed, err)
+	}
+	if _, err := s.ConsumeOAuthCode(ctx, "code-hash-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("double consume must miss, got %v", err)
+	}
+	if _, err := s.GetOAuthStateByHash(ctx, "st-hash-1"); err != nil {
+		t.Fatalf("used state stays visible for replay distinction: %v", err)
+	}
+}

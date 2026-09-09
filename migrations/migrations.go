@@ -42,6 +42,9 @@ var migration0009 string
 //go:embed 0010_project_auth_codes.sql
 var migration0010 string
 
+//go:embed 0011_auth_providers.sql
+var migration0011 string
+
 type migration struct {
 	version string
 	sql     string
@@ -58,6 +61,7 @@ var all = []migration{
 	{version: "0008_project_auth", sql: migration0008},
 	{version: "0009_api_key_roles", sql: migration0009},
 	{version: "0010_project_auth_codes", sql: migration0010},
+	{version: "0011_auth_providers", sql: migration0011},
 }
 
 // Apply runs all unapplied migrations inside transaction per migration.

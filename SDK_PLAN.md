@@ -137,6 +137,16 @@ POST /auth/v1/otp              # phone/email OTP request + verify
   token reuse is detected and the chain revoked.
 
 ### Phase A2 — Providers: OAuth, OIDC, phone, anonymous (maps to Phase 10.3)
+> **Shipped (backend):** migration `0011` (`project_auth_providers`,
+> `project_oauth_states`), store layer, `internal/sms` (log + Twilio drivers),
+> `GET /auth/v1/authorize` (allow-listed redirects, PKCE passthrough) +
+> `GET /auth/v1/callback` (code exchange, link-or-create, one-time code) +
+> `grant_type=pkce` (S256/plain, single-use), generic OIDC (discovery +
+> RS256/ES256 id_token verify), numeric phone OTP via the SMS driver,
+> anonymous sign-in + upgrade via `PUT /user`, admin provider CRUD
+> (`GET/POST /v1/projects/{id}/auth-providers`). E2E-tested against fake
+> GitHub/Google/OIDC servers. SDK `signInWithOAuth` now appends `apiKey` to
+> the authorize URL (browsers navigate without headers).
 
 Order: magic link → GitHub/Google OAuth (PKCE, `state`+`code_verifier`) → generic
 OIDC connector (covers "custom providers") → phone/SMS OTP behind pluggable

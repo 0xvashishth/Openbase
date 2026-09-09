@@ -106,6 +106,8 @@ describe('AuthClient sessions', () => {
     expect(data.url).toContain('/auth/v1/authorize?')
     expect(data.url).toContain('provider=github')
     expect(data.url).toContain('redirect_to=')
+    // Browsers navigate without headers: the key must ride the query string.
+    expect(data.url).toContain(`apiKey=${KEY}`)
   })
 
   it('mfa enroll/challenge/verify/list/unenroll hit factor endpoints', async () => {

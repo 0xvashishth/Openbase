@@ -330,6 +330,9 @@ export class AuthClient {
   }): Promise<{ data: { url: string; provider: string }; error: null }> {
     const base = this.transport.baseUrl
     const params = new URLSearchParams({ provider: args.provider })
+    // Browsers cannot send headers on navigation: the key travels as a query
+    // parameter (accepted by requireAPIKey; never logged).
+    params.set('apiKey', this.transport.apikey)
     if (args.options?.redirectTo) params.set('redirect_to', args.options.redirectTo)
     if (args.options?.scopes) params.set('scopes', args.options.scopes)
     if (this.flowType) params.set('flow_type', this.flowType)

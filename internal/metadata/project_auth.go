@@ -297,9 +297,8 @@ func (s *Postgres) ListProjectUsers(ctx context.Context, projectID, search strin
 	return out, rows.Err()
 }
 
-// UpdateProjectUser writes mutable fields (confirmations, ban, metadata,
-// password hash, anonymous promotion). Email/phone changes go through the
-// verify-both-addresses flow, not this method.
+// UpdateProjectUser writes mutable fields (email, phone, confirmations, ban,
+// metadata, password hash, anonymous promotion).
 func (s *Postgres) UpdateProjectUser(ctx context.Context, u *ProjectUser) error {
 	userMeta, err := marshalJSONB(u.UserMetadata)
 	if err != nil {
@@ -310,12 +309,12 @@ func (s *Postgres) UpdateProjectUser(ctx context.Context, u *ProjectUser) error 
 		return err
 	}
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE project_users SET password_hash = $1, email_confirmed_at = $2,
-			phone_confirmed_at = $3, banned_until = $4, is_anonymous = $5,
-			user_metadata = $6, app_metadata = $7, updated_at = now()
-		WHERE id = $8 AND project_id = $9`,
-		u.PasswordHash, u.EmailConfirmedAt, u.PhoneConfirmedAt, u.BannedUntil,
-		u.IsAnonymous, userMeta, appMeta, u.ID, u.ProjectID)
+		UPDATE project_users SET email = $1, phone = $2, password_hash = $3,
+			email_confirmed_at = $4, phone_confirmed_at = $5, banned_until = $6,
+			is_anonymous = $7, user_metadata = $8, app_metadata = $9, updated_at = now()
+		WHERE id = $10 AND project_id = $11`,
+		u.Email, u.Phone, u.PasswordHash, u.EmailConfirmedAt, u.PhoneConfirmedAt,
+		u.BannedUntil, u.IsAnonymous, userMeta, appMeta, u.ID, u.ProjectID)
 	if err != nil {
 		return mapError(err)
 	}
@@ -863,4 +862,226 @@ func (s *Postgres) MarkProjectSigningKeyRotated(ctx context.Context, projectID, 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ProjectAuthProvider is one configured identity/SMS driver for a project.
+// Secrets are envelope-encrypted; the store never sees plaintext.
+type ProjectAuthProvider struct {
+	ID                  string         `json:"id"`
+	ProjectID           string         `json:"project_id"`
+	Provider            string         `json:"provider"`
+	Enabled             bool           `json:"enabled"`
+	ClientID            string         `json:"client_id"`
+	ClientSecretEncrypted []byte       `json:"-"`
+	EncryptionKeyID     string         `json:"-"`
+	Config              map[string]any `json:"config,omitempty"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+}
+
+// ProjectOAuthState tracks one OAuth login attempt (CSRF + PKCE).
+type ProjectOAuthState struct {
+	ID                  string     `json:"id"`
+	ProjectID           string     `json:"project_id"`
+	Provider            string     `json:"provider"`
+	StateHash           string     `json:"-"`
+	RedirectTo          string     `json:"redirect_to"`
+	CodeChallenge       string     `json:"-"`
+	CodeChallengeMethod string     `json:"code_challenge_method"`
+	AuthCodeHash        string     `json:"-"`
+	UserID              *string    `json:"user_id,omitempty"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	UsedAt              *time.Time `json:"used_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+}
+
+// UpsertProjectAuthProvider creates or replaces a provider config row.
+func (s *Postgres) UpsertProjectAuthProvider(ctx context.Context, p *ProjectAuthProvider) error {
+	if p.ProjectID == "" || p.Provider == "" {
+		return errors.New("metadata: project_id and provider are required")
+	}
+	if p.ID == "" {
+		p.ID = newID()
+	}
+	now := newTime()
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = now
+	}
+	cfg, err := marshalJSONB(p.Config)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO project_auth_providers (id, project_id, provider, enabled, client_id,
+			client_secret_encrypted, encryption_key_id, config, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (project_id, provider) DO UPDATE SET
+			enabled = EXCLUDED.enabled, client_id = EXCLUDED.client_id,
+			client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+			encryption_key_id = EXCLUDED.encryption_key_id,
+			config = EXCLUDED.config, updated_at = now()`,
+		p.ID, p.ProjectID, p.Provider, p.Enabled, p.ClientID,
+		p.ClientSecretEncrypted, p.EncryptionKeyID, cfg, p.CreatedAt, now)
+	return mapError(err)
+}
+
+func scanProjectAuthProvider(row pgx.Row) (*ProjectAuthProvider, error) {
+	var p ProjectAuthProvider
+	var cfg []byte
+	err := row.Scan(&p.ID, &p.ProjectID, &p.Provider, &p.Enabled, &p.ClientID,
+		&p.ClientSecretEncrypted, &p.EncryptionKeyID, &cfg, &p.CreatedAt, &p.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.Config = unmarshalJSONBMap(cfg)
+	return &p, nil
+}
+
+const projectAuthProviderColumns = `id, project_id, provider, enabled, client_id,
+	client_secret_encrypted, encryption_key_id, config, created_at, updated_at`
+
+// GetProjectAuthProvider fetches one provider config.
+func (s *Postgres) GetProjectAuthProvider(ctx context.Context, projectID, provider string) (*ProjectAuthProvider, error) {
+	return scanProjectAuthProvider(s.pool.QueryRow(ctx, `
+		SELECT `+projectAuthProviderColumns+`
+		FROM project_auth_providers WHERE project_id = $1 AND provider = $2`, projectID, provider))
+}
+
+// ListProjectAuthProviders returns a project's provider configs.
+func (s *Postgres) ListProjectAuthProviders(ctx context.Context, projectID string) ([]ProjectAuthProvider, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+projectAuthProviderColumns+`
+		FROM project_auth_providers WHERE project_id = $1 ORDER BY provider`, projectID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	out := []ProjectAuthProvider{}
+	for rows.Next() {
+		p, err := scanProjectAuthProvider(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *p)
+	}
+	return out, rows.Err()
+}
+
+// DeleteProjectAuthProvider removes a provider config.
+func (s *Postgres) DeleteProjectAuthProvider(ctx context.Context, projectID, provider string) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM project_auth_providers WHERE project_id = $1 AND provider = $2`, projectID, provider)
+	if err != nil {
+		return mapError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CreateOAuthState stores a login attempt (state hash only, never plaintext).
+func (s *Postgres) CreateOAuthState(ctx context.Context, st *ProjectOAuthState) error {
+	if st.ProjectID == "" || st.Provider == "" || st.StateHash == "" || st.ExpiresAt.IsZero() {
+		return errors.New("metadata: oauth state fields incomplete")
+	}
+	if st.ID == "" {
+		st.ID = newID()
+	}
+	if st.CreatedAt.IsZero() {
+		st.CreatedAt = newTime()
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO project_oauth_states (id, project_id, provider, state_hash, redirect_to,
+			code_challenge, code_challenge_method, expires_at, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		st.ID, st.ProjectID, st.Provider, st.StateHash, st.RedirectTo,
+		st.CodeChallenge, st.CodeChallengeMethod, st.ExpiresAt, st.CreatedAt)
+	return mapError(err)
+}
+
+const oauthStateColumns = `id, project_id, provider, state_hash, redirect_to,
+	code_challenge, code_challenge_method, auth_code_hash, user_id,
+	expires_at, used_at, created_at`
+
+// scanOAuthStateNullable reads the nullable auth_code_hash/user_id columns.
+func scanOAuthStateNullable(row pgx.Row) (*ProjectOAuthState, error) {
+	var st ProjectOAuthState
+	var codeHash, userID *string
+	err := row.Scan(&st.ID, &st.ProjectID, &st.Provider, &st.StateHash, &st.RedirectTo,
+		&st.CodeChallenge, &st.CodeChallengeMethod, &codeHash, &userID,
+		&st.ExpiresAt, &st.UsedAt, &st.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if codeHash != nil {
+		st.AuthCodeHash = *codeHash
+	}
+	st.UserID = userID
+	return &st, nil
+}
+
+// GetOAuthStateByHash fetches a live (unexpired) state. Used states stay
+// visible so the callback can distinguish replay (410-style 400) from unknown.
+func (s *Postgres) GetOAuthStateByHash(ctx context.Context, hash string) (*ProjectOAuthState, error) {
+	return scanOAuthStateNullable(s.pool.QueryRow(ctx, `
+		SELECT `+oauthStateColumns+`
+		FROM project_oauth_states WHERE state_hash = $1 AND expires_at > now()`, hash))
+}
+
+// AttachOAuthCode binds the resolved user + one-time code to a state after a
+// successful provider callback. Only pristine states accept a code.
+func (s *Postgres) AttachOAuthCode(ctx context.Context, stateID, userID, codeHash string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE project_oauth_states SET auth_code_hash = $1, user_id = $2
+		WHERE id = $3 AND auth_code_hash IS NULL AND used_at IS NULL AND expires_at > now()`,
+		codeHash, userID, stateID)
+	if err != nil {
+		return mapError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ConsumeOAuthCode validates a pkce exchange and burns the state atomically:
+// exactly one exchange wins the race.
+func (s *Postgres) ConsumeOAuthCode(ctx context.Context, codeHash string) (*ProjectOAuthState, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	st, err := scanOAuthStateNullable(tx.QueryRow(ctx, `
+		SELECT `+oauthStateColumns+`
+		FROM project_oauth_states
+		WHERE auth_code_hash = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`, codeHash))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE project_oauth_states SET used_at = now() WHERE id = $1`, st.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// CleanupExpiredOAuthStates deletes spent states; returns rows removed.
+func (s *Postgres) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM project_oauth_states WHERE expires_at < now() - interval '1 hour'`)
+	if err != nil {
+		return 0, mapError(err)
+	}
+	return int(tag.RowsAffected()), nil
 }

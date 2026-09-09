@@ -345,6 +345,15 @@ type Store interface {
 	GetProjectAuthCodeByHash(ctx context.Context, hash string) (*ProjectAuthCode, error)
 	MarkProjectAuthCodeUsed(ctx context.Context, id string) error
 	RevokeProjectAuthCodesForUser(ctx context.Context, projectID, userID, kind string) error
+	UpsertProjectAuthProvider(ctx context.Context, p *ProjectAuthProvider) error
+	GetProjectAuthProvider(ctx context.Context, projectID, provider string) (*ProjectAuthProvider, error)
+	ListProjectAuthProviders(ctx context.Context, projectID string) ([]ProjectAuthProvider, error)
+	DeleteProjectAuthProvider(ctx context.Context, projectID, provider string) error
+	CreateOAuthState(ctx context.Context, st *ProjectOAuthState) error
+	GetOAuthStateByHash(ctx context.Context, hash string) (*ProjectOAuthState, error)
+	AttachOAuthCode(ctx context.Context, stateID, userID, codeHash string) error
+	ConsumeOAuthCode(ctx context.Context, codeHash string) (*ProjectOAuthState, error)
+	CleanupExpiredOAuthStates(ctx context.Context) (int, error)
 }
 
 // WebhookDelivery records one webhook trigger delivery attempt for the

@@ -237,6 +237,17 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /auth/v1/verify", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectVerify))))
 	mux.Handle("POST /auth/v1/otp", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectOTP))))
 
+	// OAuth: authorize is key-authenticated via ?apikey= (browsers cannot set
+	// headers on navigation); the callback is public — the one-time state is
+	// the credential. Both are IP rate-limited.
+	mux.Handle("GET /auth/v1/authorize", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectAuthorize))))
+	mux.Handle("GET /auth/v1/callback", s.limitAuth(http.HandlerFunc(s.projectCallback)))
+
+	// Provider configuration (admin+, secret redacted on read).
+	mux.Handle("GET /v1/projects/{projectID}/auth-providers", s.requireAuth(http.HandlerFunc(s.listAuthProviders)))
+	mux.Handle("POST /v1/projects/{projectID}/auth-providers", s.requireAuth(http.HandlerFunc(s.upsertAuthProvider)))
+	mux.Handle("DELETE /v1/projects/{projectID}/auth-providers/{provider}", s.requireAuth(http.HandlerFunc(s.deleteAuthProvider)))
+
 	// Public JWKS so third parties can verify end-user tokens (no auth: the
 	// keys are public by design; unknown projects 404 via the FK on bootstrap).
 	mux.HandleFunc("GET /v1/projects/{projectID}/.well-known/jwks.json", s.projectJWKS)
