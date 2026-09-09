@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -329,6 +330,10 @@ func (s *Server) projectCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := s.linkOrCreateProviderUser(r.Context(), st.ProjectID, provider, idn)
 	if err != nil {
+		if errors.Is(err, errHookRejected) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		s.writeErr(w, err)
 		return
 	}
@@ -380,8 +385,27 @@ func (s *Server) linkOrCreateProviderUser(ctx context.Context, projectID, provid
 	if u.Email == nil {
 		u.IsAnonymous = true
 	}
+	if hookRes, herr := s.hooks().run(ctx, projectID, metadata.HookBeforeUserCreated, map[string]any{
+		"user": map[string]any{"email": strOrEmpty(u.Email), "provider": provider},
+	}); herr != nil {
+		return nil, herr
+	} else if msg := hookError(hookRes); msg != "" {
+		return nil, fmt.Errorf("%w: signup rejected: %s", errHookRejected, msg)
+	} else {
+		if u.UserMetadata == nil {
+			u.UserMetadata = map[string]any{}
+		}
+		for k, v := range hookUserMetadata(hookRes) {
+			u.UserMetadata[k] = v
+		}
+	}
 	if err := s.svc.Store.CreateProjectUser(ctx, u); err != nil {
 		return nil, err
+	}
+	if _, herr := s.hooks().run(ctx, projectID, metadata.HookAfterUserCreated, map[string]any{
+		"user": map[string]any{"id": u.ID, "email": strOrEmpty(u.Email), "provider": provider},
+	}); herr != nil {
+		s.svc.Log.Warn("auth hook after-user-created failed", "project", projectID, "err", herr)
 	}
 	_ = s.svc.Store.UpsertProjectIdentity(ctx, &metadata.ProjectIdentity{
 		ProjectID: projectID, UserID: u.ID, Provider: provider,
@@ -524,7 +548,112 @@ func deref(s *string, fallback string) string {
 	return fallback
 }
 
-// ---- grant_type=pkce ----
+// ---- grant_type=id_token (native Google/Apple sign-in) ----
+
+// projectTokenIDToken verifies a provider id_token and signs the user in
+// without a browser round-trip. Supported for google (fixed JWKS/issuer) and
+// oidc (per-project discovery). The nonce parameter is accepted and returned
+// in the audit trail but not enforced against stored values — native SDKs own
+// replay protection for their own nonces; the Openbase session tokens minted
+// here are short-lived regardless.
+func (s *Server) projectTokenIDToken(w http.ResponseWriter, r *http.Request, projectID string) {
+	var req struct {
+		Provider string `json:"provider"`
+		IDToken  string `json:"id_token"`
+		Nonce    string `json:"nonce"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.IDToken) == "" {
+		writeError(w, http.StatusBadRequest, "id_token is required")
+		return
+	}
+	provider := req.Provider
+	if provider == "" {
+		provider = "google"
+	}
+	row, _, err := s.providerCredentials(r.Context(), projectID, provider)
+	if err != nil || row.ClientID == "" {
+		writeError(w, http.StatusBadRequest, "provider "+provider+" is not configured")
+		return
+	}
+	var jwksURI, issuer string
+	switch provider {
+	case "google":
+		jwksURI = endpointOverride(row.Config, "jwks_uri", "https://www.googleapis.com/oauth2/v3/certs")
+		issuer = "https://accounts.google.com"
+	case "oidc":
+		disc, derr := discoverOIDC(r.Context(), configString(row.Config, "issuer"))
+		if derr != nil {
+			writeError(w, http.StatusBadGateway, "provider endpoints unavailable")
+			return
+		}
+		jwksURI, issuer = disc.JWKSURI, disc.Issuer
+	default:
+		writeError(w, http.StatusBadRequest, "id_token grant supports google and oidc")
+		return
+	}
+	sub, email, verified, name, verr := verifyAndParseIDToken(r.Context(), req.IDToken, jwksURI, row.ClientID, issuer)
+	if verr != nil {
+		writeError(w, http.StatusUnauthorized, "invalid id_token")
+		return
+	}
+	u, err := s.linkOrCreateProviderUser(r.Context(), projectID, provider, &providerIdentity{
+		UID: sub, Email: email, EmailVerified: verified, Name: name,
+	})
+	if err != nil {
+		if errors.Is(err, errHookRejected) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		s.writeErr(w, err)
+		return
+	}
+	if u.Banned(time.Now()) {
+		writeError(w, http.StatusForbidden, "user is banned")
+		return
+	}
+	ses, err := s.issueProjectSession(r, projectID, u)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	_ = req.Nonce
+	writeJSON(w, http.StatusOK, ses)
+}
+
+func configString(cfg map[string]any, key string) string {
+	if cfg == nil {
+		return ""
+	}
+	v, _ := cfg[key].(string)
+	return v
+}
+
+// verifyAndParseIDToken verifies the signature/audience and returns the
+// identity claims.
+func verifyAndParseIDToken(ctx context.Context, raw, jwksURI, clientID, issuer string) (sub, email string, verified bool, name string, err error) {
+	if err := verifyOIDCIDToken(ctx, raw, jwksURI, clientID, issuer); err != nil {
+		return "", "", false, "", err
+	}
+	// Signature verified above; read the claims unverified.
+	parser := jwt.NewParser()
+	tok, _, perr := parser.ParseUnverified(raw, jwt.MapClaims{})
+	if perr != nil {
+		return "", "", false, "", perr
+	}
+	claims, _ := tok.Claims.(jwt.MapClaims)
+	sub, _ = claims["sub"].(string)
+	email, _ = claims["email"].(string)
+	name, _ = claims["name"].(string)
+	verified, _ = claims["email_verified"].(bool)
+	if sub == "" {
+		return "", "", false, "", fmt.Errorf("id_token has no subject")
+	}
+	return sub, email, verified, name, nil
+}
 
 // projectTokenPKCE exchanges the callback's one-time code for a session,
 // verifying the PKCE challenge when the login used one.

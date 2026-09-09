@@ -930,10 +930,13 @@ func (s *Postgres) AppendAuditEvent(ctx context.Context, e *AuditEvent) error {
 	if err != nil {
 		return err
 	}
+	// Empty UUID/IP strings become NULL: several callers record actions that
+	// have no org/project (or ip), and a silent audit loss is worse than a
+	// NULL column. Previously these writes failed (logged, never surfaced).
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO audit_events (id, actor_user_id, organization_id, project_id, action, target_type, target_id, metadata, ip, user_agent, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		e.ID, e.ActorUserID, e.OrganizationID, e.ProjectID, e.Action, e.TargetType, e.TargetID, metadataJSON, e.IP, e.UserAgent, e.CreatedAt)
+		INSERT INTO audit_events (id, actor_user_id, actor_key_id, organization_id, project_id, action, target_type, target_id, metadata, ip, user_agent, created_at)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, '')::uuid, NULLIF($5, '')::uuid, $6, $7, $8, $9, NULLIF($10, '')::inet, $11, $12)`,
+		e.ID, e.ActorUserID, e.ActorKeyID, e.OrganizationID, e.ProjectID, e.Action, e.TargetType, e.TargetID, metadataJSON, e.IP, e.UserAgent, e.CreatedAt)
 	return err
 }
 

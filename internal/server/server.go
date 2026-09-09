@@ -13,6 +13,7 @@ import (
 
 	"github.com/openbase/openbase/internal/adapter"
 	"github.com/openbase/openbase/internal/auth"
+	"github.com/openbase/openbase/internal/function"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/pool"
 	"github.com/openbase/openbase/internal/projectauth"
@@ -83,6 +84,12 @@ type Services struct {
 	// If nil, New wires one from Store + Secrets + PublicBaseURL; handlers
 	// use projectAuthManager which also lazily builds it per request.
 	ProjectAuth *projectauth.Manager
+
+	// Functions runs user-authored functions synchronously for auth hooks
+	// (Phase 10, A3.2). If nil, configured fail-closed hooks fail and
+	// fail-open hooks log-and-continue. Wired to function.New() in
+	// production; tests set it when hook execution is under test.
+	Functions function.Runner
 
 	// Operability knobs (Phase 8.7). Zero values select safe defaults, so
 	// every existing Services literal keeps working unchanged.
@@ -248,6 +255,37 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/projects/{projectID}/auth-providers", s.requireAuth(http.HandlerFunc(s.upsertAuthProvider)))
 	mux.Handle("DELETE /v1/projects/{projectID}/auth-providers/{provider}", s.requireAuth(http.HandlerFunc(s.deleteAuthProvider)))
 
+	// Auth hook config (admin+, secret-free by design).
+	mux.Handle("GET /v1/projects/{projectID}/auth-hooks", s.requireAuth(http.HandlerFunc(s.listAuthHooks)))
+	mux.Handle("POST /v1/projects/{projectID}/auth-hooks", s.requireAuth(http.HandlerFunc(s.upsertAuthHook)))
+	mux.Handle("DELETE /v1/projects/{projectID}/auth-hooks/{event}", s.requireAuth(http.HandlerFunc(s.deleteAuthHook)))
+
+	// End-user MFA (user-JWT authed inside each handler; key/JWT dual path).
+	mux.Handle("POST /auth/v1/factors", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.mfaEnroll))))
+	mux.Handle("GET /auth/v1/factors", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.mfaListFactors))))
+	mux.Handle("POST /auth/v1/factors/{factorID}/challenge", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.mfaChallenge))))
+	mux.Handle("POST /auth/v1/factors/{factorID}/verify", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.mfaVerify))))
+	mux.Handle("DELETE /auth/v1/factors/{factorID}", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.mfaUnenroll))))
+
+	// End-user admin API (service_role keys only; every mutation audited).
+	admin := func(h http.HandlerFunc) http.Handler {
+		return s.limitAuth(s.requireAPIKey(s.requireServiceRole(h)))
+	}
+	mux.Handle("GET /auth/v1/admin/users", admin(s.adminListUsers))
+	mux.Handle("POST /auth/v1/admin/users", admin(s.adminCreateUser))
+	mux.Handle("GET /auth/v1/admin/users/{userID}", admin(s.adminGetUser))
+	mux.Handle("PUT /auth/v1/admin/users/{userID}", admin(s.adminUpdateUser))
+	mux.Handle("DELETE /auth/v1/admin/users/{userID}", admin(s.adminDeleteUser))
+	mux.Handle("POST /auth/v1/admin/invite", admin(s.adminInviteUser))
+	mux.Handle("POST /auth/v1/admin/generate_link", admin(s.adminGenerateLink))
+	mux.Handle("POST /auth/v1/admin/impersonate", admin(s.adminImpersonate))
+
+	// Operator-facing end-user management for the dashboard (admin+, no
+	// service_role key involved).
+	mux.Handle("GET /v1/projects/{projectID}/users", s.requireAuth(http.HandlerFunc(s.opListProjectUsers)))
+	mux.Handle("PUT /v1/projects/{projectID}/users/{userID}", s.requireAuth(http.HandlerFunc(s.opUpdateProjectUser)))
+	mux.Handle("DELETE /v1/projects/{projectID}/users/{userID}", s.requireAuth(http.HandlerFunc(s.opDeleteProjectUser)))
+
 	// Public JWKS so third parties can verify end-user tokens (no auth: the
 	// keys are public by design; unknown projects 404 via the FK on bootstrap).
 	mux.HandleFunc("GET /v1/projects/{projectID}/.well-known/jwks.json", s.projectJWKS)
@@ -360,6 +398,7 @@ const (
 	ctxProjectID ctxKey = "projectID"
 	ctxKeyRole   ctxKey = "keyRole"
 	ctxEndUserID ctxKey = "endUserID"
+	ctxKeyID     ctxKey = "keyID"
 )
 
 // ---- helpers ----

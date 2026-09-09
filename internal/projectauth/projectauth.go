@@ -41,10 +41,13 @@ const AccessTTL = 15 * time.Minute
 
 // Claims is the end-user access-token payload.
 type Claims struct {
-	UserID    string `json:"uid"`
-	ProjectID string `json:"pid"`
-	Role      string `json:"role"`
-	AAL       string `json:"aal"`
+	UserID    string         `json:"uid"`
+	ProjectID string         `json:"pid"`
+	Role      string         `json:"role"`
+	AAL       string         `json:"aal"`
+	// Custom carries hook-injected claims (before-token-issued). Verified
+	// like any other claim; consumers must namespace their keys.
+	Custom    map[string]any `json:"custom,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -224,6 +227,11 @@ func (k *KeySet) ImportPublic(j JWK) error {
 
 // Issue mints a short-lived end-user access token.
 func (k *KeySet) Issue(userID, role, aal string, ttl time.Duration) (string, time.Time, error) {
+	return k.IssueCustom(userID, role, aal, ttl, nil)
+}
+
+// IssueCustom mints like Issue with additional hook-provided claims.
+func (k *KeySet) IssueCustom(userID, role, aal string, ttl time.Duration, custom map[string]any) (string, time.Time, error) {
 	if userID == "" {
 		return "", time.Time{}, errors.New("projectauth: userID is required")
 	}
@@ -246,6 +254,7 @@ func (k *KeySet) Issue(userID, role, aal string, ttl time.Duration) (string, tim
 		ProjectID: k.projectID,
 		Role:      role,
 		AAL:       aal,
+		Custom:    custom,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			Issuer:    k.issuer,

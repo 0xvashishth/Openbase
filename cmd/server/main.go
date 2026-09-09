@@ -113,6 +113,10 @@ func run(log *slog.Logger) error {
 	svc.TriggerService = trigSvc
 	defer trigSvc.Stop()
 
+	// Synchronous function runner for auth hooks (Phase 10, A3.2). Same
+	// sandbox as trigger functions; hooks without configuration never call it.
+	svc.Functions = function.New()
+
 // Provisioning (ARCHITECTURE.md §2.7): a Compose-backed provisioner that
 // creates dedicated per-project Postgres containers. Off unless Docker is
 // explicitly enabled.

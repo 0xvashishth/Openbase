@@ -421,3 +421,47 @@ func TestProjectAuthProvidersAndOAuthStates(t *testing.T) {
 		t.Fatalf("used state stays visible for replay distinction: %v", err)
 	}
 }
+
+func TestProjectAuthHooksCRUD(t *testing.T) {
+	s := setup(t)
+	ctx := context.Background()
+	pID := setupProject(t, s)
+
+	if _, err := s.GetProjectAuthHook(ctx, pID, HookBeforeUserCreated); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unconfigured hook must miss, got %v", err)
+	}
+	fn := &Function{ProjectID: pID, Name: "hook-fn", Runtime: "node"}
+	if err := s.CreateFunction(ctx, fn); err != nil {
+		t.Fatal(err)
+	}
+	fn2 := &Function{ProjectID: pID, Name: "hook-fn-2", Runtime: "node"}
+	if err := s.CreateFunction(ctx, fn2); err != nil {
+		t.Fatal(err)
+	}
+	h := &ProjectAuthHook{ProjectID: pID, Event: HookBeforeUserCreated, FunctionID: fn.ID}
+	if err := s.UpsertProjectAuthHook(ctx, h); err != nil {
+		t.Fatalf("UpsertProjectAuthHook: %v", err)
+	}
+	got, err := s.GetProjectAuthHook(ctx, pID, HookBeforeUserCreated)
+	if err != nil || got.FunctionID != h.FunctionID || got.FailOpen {
+		t.Fatalf("GetProjectAuthHook: %+v %v", got, err)
+	}
+	// Replace (one row per event).
+	h2 := &ProjectAuthHook{ProjectID: pID, Event: HookBeforeUserCreated, FunctionID: fn2.ID, FailOpen: true}
+	if err := s.UpsertProjectAuthHook(ctx, h2); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := s.ListProjectAuthHooks(ctx, pID)
+	if err != nil || len(listed) != 1 || !listed[0].FailOpen {
+		t.Fatalf("list hooks: %+v %v", listed, err)
+	}
+	if err := s.UpsertProjectAuthHook(ctx, &ProjectAuthHook{ProjectID: pID, Event: "bogus", FunctionID: fn.ID}); err == nil {
+		t.Fatal("unknown event must fail")
+	}
+	if err := s.DeleteProjectAuthHook(ctx, pID, HookBeforeUserCreated); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetProjectAuthHook(ctx, pID, HookBeforeUserCreated); !errors.Is(err, ErrNotFound) {
+		t.Fatal("deleted hook must miss")
+	}
+}

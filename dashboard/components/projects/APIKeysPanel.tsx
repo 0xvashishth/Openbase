@@ -17,6 +17,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [role, setRole] = useState<"anon" | "service_role">("service_role");
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -48,10 +49,15 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
     try {
       const token = authToken();
       if (!token) throw new Error("Not authenticated");
-      const res = await api.createAPIKey(token, projectId, name.trim());
+      const res = await api.createAPIKey(token, projectId, name.trim(), role);
       setNewKey(res.plaintext);
       setName("");
-      toast.success("API key created", "Copy it now — it won't be shown again.");
+      toast.success(
+        role === "anon" ? "Anon key created" : "Service-role key created",
+        role === "anon"
+          ? "Safe for browsers (row policies apply once enabled)."
+          : "Full bypass — server-side only, never ship it to a browser."
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create key");
@@ -102,6 +108,19 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
               placeholder="e.g. production-app"
             />
           </div>
+          <div>
+            <Label htmlFor="key-role">Role</Label>
+            <select
+              id="key-role"
+              className="rounded-md border bg-transparent px-2 py-1.5 text-body-sm"
+              value={role}
+              onChange={(e) => setRole(e.target.value as "anon" | "service_role")}
+              title="anon is browser-safe; service_role bypasses row policies and must stay server-side"
+            >
+              <option value="anon">anon (browser-safe)</option>
+              <option value="service_role">service_role (server-only)</option>
+            </select>
+          </div>
           <Button type="submit" loading={creating}>
             Create
           </Button>
@@ -136,6 +155,7 @@ export function APIKeysPanel({ projectId }: { projectId: string }) {
                   <span className="block truncate text-caption font-w510 text-foreground-strong">{k.name}</span>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-label text-muted-foreground">
                     <span>created {new Date(k.created_at).toLocaleDateString()}</span>
+                    {k.role && <Badge>{k.role}</Badge>}
                     {k.revoked_at && <Badge variant="destructive">revoked</Badge>}
                   </div>
                 </div>

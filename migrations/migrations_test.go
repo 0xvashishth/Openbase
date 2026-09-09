@@ -48,6 +48,7 @@ func TestTablesExistAfterApply(t *testing.T) {
 		"project_auth_settings", "project_mfa_factors", "project_mfa_challenges",
 		"project_signing_keys", "project_auth_codes",
 		"project_auth_providers", "project_oauth_states",
+		"project_auth_hooks",
 	}
 	for _, table := range want {
 		var exists bool

@@ -42,3 +42,14 @@ func endUserIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxEndUserID).(string)
 	return v
 }
+
+func contextWithKeyID(ctx context.Context, keyID string) context.Context {
+	return context.WithValue(ctx, ctxKeyID, keyID)
+}
+
+// keyIDFromContext returns the API key row ID (for audit actors). Empty for
+// JWT-authenticated requests, which have no key.
+func keyIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxKeyID).(string)
+	return v
+}

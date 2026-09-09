@@ -1085,3 +1085,99 @@ func (s *Postgres) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
 	}
 	return int(tag.RowsAffected()), nil
 }
+
+// Hook events (mirror the 0012 CHECK constraint).
+const (
+	HookBeforeUserCreated = "before-user-created"
+	HookAfterUserCreated  = "after-user-created"
+	HookBeforeTokenIssued = "before-token-issued"
+)
+
+// ValidHookEvent reports whether event is a known auth hook.
+func ValidHookEvent(event string) bool {
+	switch event {
+	case HookBeforeUserCreated, HookAfterUserCreated, HookBeforeTokenIssued:
+		return true
+	}
+	return false
+}
+
+// ProjectAuthHook invokes a project function on an identity event.
+type ProjectAuthHook struct {
+	ID         string    `json:"id"`
+	ProjectID  string    `json:"project_id"`
+	Event      string    `json:"event"`
+	FunctionID string    `json:"function_id"`
+	FailOpen   bool      `json:"fail_open"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// UpsertProjectAuthHook creates or replaces a hook (one per event per project).
+func (s *Postgres) UpsertProjectAuthHook(ctx context.Context, h *ProjectAuthHook) error {
+	if h.ProjectID == "" || !ValidHookEvent(h.Event) || h.FunctionID == "" {
+		return errors.New("metadata: hook project/event/function are required")
+	}
+	if h.ID == "" {
+		h.ID = newID()
+	}
+	if h.CreatedAt.IsZero() {
+		h.CreatedAt = newTime()
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO project_auth_hooks (id, project_id, event, function_id, fail_open, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (project_id, event) DO UPDATE SET
+			function_id = EXCLUDED.function_id, fail_open = EXCLUDED.fail_open`,
+		h.ID, h.ProjectID, h.Event, h.FunctionID, h.FailOpen, h.CreatedAt)
+	return mapError(err)
+}
+
+// GetProjectAuthHook fetches a hook; ErrNotFound when unconfigured (the
+// common case — callers treat that as "no hook", not an error to surface).
+func (s *Postgres) GetProjectAuthHook(ctx context.Context, projectID, event string) (*ProjectAuthHook, error) {
+	var h ProjectAuthHook
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, project_id, event, function_id, fail_open, created_at
+		FROM project_auth_hooks WHERE project_id = $1 AND event = $2`, projectID, event).
+		Scan(&h.ID, &h.ProjectID, &h.Event, &h.FunctionID, &h.FailOpen, &h.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &h, nil
+}
+
+// ListProjectAuthHooks returns a project's hooks.
+func (s *Postgres) ListProjectAuthHooks(ctx context.Context, projectID string) ([]ProjectAuthHook, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, project_id, event, function_id, fail_open, created_at
+		FROM project_auth_hooks WHERE project_id = $1 ORDER BY event`, projectID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	out := []ProjectAuthHook{}
+	for rows.Next() {
+		var h ProjectAuthHook
+		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Event, &h.FunctionID, &h.FailOpen, &h.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// DeleteProjectAuthHook removes a hook.
+func (s *Postgres) DeleteProjectAuthHook(ctx context.Context, projectID, event string) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM project_auth_hooks WHERE project_id = $1 AND event = $2`, projectID, event)
+	if err != nil {
+		return mapError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

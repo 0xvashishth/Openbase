@@ -69,7 +69,7 @@ func (s *Server) requireAPIKey(next http.Handler) http.Handler {
 		if role == "" {
 			role = "service_role"
 		}
-		ctx := contextWithKeyRole(contextWithProjectID(r.Context(), k.ProjectID), role)
+		ctx := contextWithKeyID(contextWithKeyRole(contextWithProjectID(r.Context(), k.ProjectID), role), k.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

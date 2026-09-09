@@ -2,6 +2,8 @@
 
 import type {
   APIKeyView,
+  AuthHookView,
+  AuthProviderView,
   AuthResponse,
   ConnectInfo,
   Connection,
@@ -12,6 +14,8 @@ import type {
   OrgMember,
   OrgRole,
   Project,
+  ProjectUserList,
+  ProjectUserView,
   QueryRowsRequest,
   ResultSet,
   SchemaInfo,
@@ -200,12 +204,48 @@ export const api = {
   // API keys.
   listAPIKeys: (token: string, projectId: string) =>
     request<APIKeyView[]>("GET", `/v1/projects/${projectId}/api-keys`, undefined, token),
-  createAPIKey: (token: string, projectId: string, name: string) =>
-    request<{ id: string; name: string; plaintext: string; key_hash: string; scopes: string[]; created_at: string }>(
-      "POST", `/v1/projects/${projectId}/api-keys`, { name }, token
+  createAPIKey: (token: string, projectId: string, name: string, role?: "anon" | "service_role") =>
+    request<{ id: string; name: string; role: string; plaintext: string; key_hash: string; scopes: string[]; created_at: string }>(
+      "POST", `/v1/projects/${projectId}/api-keys`, { name, role }, token
     ),
   revokeAPIKey: (token: string, projectId: string, keyID: string) =>
     request<{ revoked: boolean }>("DELETE", `/v1/projects/${projectId}/api-keys/${keyID}`, undefined, token),
+
+  // End users per project (Phase 10, operator-facing).
+  listProjectUsers: (token: string, projectId: string, search?: string) => {
+    const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+    return request<ProjectUserList>("GET", `/v1/projects/${projectId}/users${qs}`, undefined, token);
+  },
+  updateProjectUser: (
+    token: string,
+    projectId: string,
+    userId: string,
+    body: { banned?: boolean; ban_duration?: string; confirm_email?: boolean; confirm_phone?: boolean }
+  ) => request<{ user: ProjectUserView }>("PUT", `/v1/projects/${projectId}/users/${userId}`, body, token),
+  deleteProjectUser: (token: string, projectId: string, userId: string) =>
+    request<{ status: string }>("DELETE", `/v1/projects/${projectId}/users/${userId}`, undefined, token),
+
+  // Sign-in providers (Phase 10 A2, secrets write-only).
+  listAuthProviders: (token: string, projectId: string) =>
+    request<AuthProviderView[]>("GET", `/v1/projects/${projectId}/auth-providers`, undefined, token),
+  upsertAuthProvider: (
+    token: string,
+    projectId: string,
+    body: { provider: string; enabled?: boolean; client_id?: string; client_secret?: string; config?: Record<string, unknown> }
+  ) => request<{ provider: string; enabled: boolean }>("POST", `/v1/projects/${projectId}/auth-providers`, body, token),
+  deleteAuthProvider: (token: string, projectId: string, provider: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/auth-providers/${provider}`, undefined, token),
+
+  // Auth hooks (Phase 10 A3.2).
+  listAuthHooks: (token: string, projectId: string) =>
+    request<AuthHookView[]>("GET", `/v1/projects/${projectId}/auth-hooks`, undefined, token),
+  upsertAuthHook: (
+    token: string,
+    projectId: string,
+    body: { event: AuthHookView["event"]; function_id: string; fail_open?: boolean }
+  ) => request<AuthHookView>("POST", `/v1/projects/${projectId}/auth-hooks`, body, token),
+  deleteAuthHook: (token: string, projectId: string, event: string) =>
+    request<{ deleted: boolean }>("DELETE", `/v1/projects/${projectId}/auth-hooks/${event}`, undefined, token),
 
   // Triggers.
   listTriggers: (token: string, projectId: string) =>

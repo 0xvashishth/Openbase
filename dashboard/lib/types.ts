@@ -196,9 +196,50 @@ export interface FullSchema {
 export interface APIKeyView {
   id: string;
   name: string;
+  role: string;
   scopes: string[];
   created_at: string;
   revoked_at?: string;
+}
+
+// End users per project (Phase 10).
+
+export interface ProjectUserView {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+  email_confirmed_at?: string | null;
+  phone_confirmed_at?: string | null;
+  banned_until?: string | null;
+  is_anonymous?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ProjectUserList {
+  users: ProjectUserView[];
+  page: number;
+  per_page: number;
+}
+
+// Configured sign-in providers (Phase 10 A2). Secrets are never returned.
+export interface AuthProviderView {
+  provider: string;
+  enabled: boolean;
+  client_id: string;
+  has_secret: boolean;
+  config: Record<string, unknown>;
+}
+
+// Auth hooks (Phase 10 A3.2).
+export interface AuthHookView {
+  id: string;
+  event: "before-user-created" | "after-user-created" | "before-token-issued";
+  function_id: string;
+  fail_open: boolean;
+  created_at: string;
 }
 
 // Triggers + runtime functions (Phase 4).

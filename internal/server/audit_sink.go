@@ -32,13 +32,15 @@ func (a *PostgresAuditSink) Record(ctx context.Context, actorUserID, orgID, proj
 		}
 	}
 	e := &metadata.AuditEvent{
-		ActorUserID:    actorUserID,
 		OrganizationID: orgID,
 		ProjectID:      projectID,
 		Action:         action,
 		TargetType:     targetType,
 		TargetID:       tid,
 		Metadata:       meta,
+	}
+	if actorUserID != "" {
+		e.ActorUserID = &actorUserID
 	}
 	if err := a.Store.AppendAuditEvent(ctx, e); err != nil {
 		if a.Log != nil {

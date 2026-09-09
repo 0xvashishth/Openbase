@@ -93,7 +93,10 @@ func (s *Postgres) ListAuditEvents(ctx context.Context, orgID string, limit int)
 		limit = 200
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, actor_user_id, organization_id, project_id, action, target_type, target_id, metadata, ip, user_agent, created_at
+		SELECT id, actor_user_id, COALESCE(actor_key_id, ''),
+			COALESCE(organization_id::text, ''), COALESCE(project_id::text, ''),
+			action, target_type, COALESCE(target_id, ''), COALESCE(metadata, '{}'),
+			COALESCE(ip::text, ''), COALESCE(user_agent, ''), created_at
 		FROM audit_events
 		WHERE organization_id = $1
 		ORDER BY created_at DESC LIMIT $2`, orgID, limit)
@@ -104,7 +107,7 @@ func (s *Postgres) ListAuditEvents(ctx context.Context, orgID string, limit int)
 	out := []AuditEvent{}
 	for rows.Next() {
 		var e AuditEvent
-		if err := rows.Scan(&e.ID, &e.ActorUserID, &e.OrganizationID, &e.ProjectID, &e.Action, &e.TargetType, &e.TargetID, &e.Metadata, &e.IP, &e.UserAgent, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.ActorUserID, &e.ActorKeyID, &e.OrganizationID, &e.ProjectID, &e.Action, &e.TargetType, &e.TargetID, &e.Metadata, &e.IP, &e.UserAgent, &e.CreatedAt); err != nil {
 			return nil, mapError(err)
 		}
 		out = append(out, e)

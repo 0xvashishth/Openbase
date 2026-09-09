@@ -354,6 +354,10 @@ type Store interface {
 	AttachOAuthCode(ctx context.Context, stateID, userID, codeHash string) error
 	ConsumeOAuthCode(ctx context.Context, codeHash string) (*ProjectOAuthState, error)
 	CleanupExpiredOAuthStates(ctx context.Context) (int, error)
+	UpsertProjectAuthHook(ctx context.Context, h *ProjectAuthHook) error
+	GetProjectAuthHook(ctx context.Context, projectID, event string) (*ProjectAuthHook, error)
+	ListProjectAuthHooks(ctx context.Context, projectID string) ([]ProjectAuthHook, error)
+	DeleteProjectAuthHook(ctx context.Context, projectID, event string) error
 }
 
 // WebhookDelivery records one webhook trigger delivery attempt for the
@@ -397,10 +401,13 @@ type MailLog struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// AuditEvent represents a single audit log entry.
+// AuditEvent represents a single audit log entry. Exactly one of
+// ActorUserID (operator/user action) and ActorKeyID (service_role key action,
+// "service_role:<key-id>") is set.
 type AuditEvent struct {
 	ID              string         `json:"id"`
-	ActorUserID     string         `json:"actor_user_id"`
+	ActorUserID     *string        `json:"actor_user_id,omitempty"`
+	ActorKeyID      string         `json:"actor_key_id,omitempty"`
 	OrganizationID  string         `json:"organization_id,omitempty"`
 	ProjectID       string         `json:"project_id,omitempty"`
 	Action          string         `json:"action"`

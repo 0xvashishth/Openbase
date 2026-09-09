@@ -106,6 +106,33 @@ func (s *Server) projectAuthManager(r *http.Request) *projectauth.Manager {
 // issueProjectSession creates a refresh session row and mints the access
 // token pair returned by signup / token endpoints.
 func (s *Server) issueProjectSession(r *http.Request, projectID string, u *metadata.ProjectUser) (*projectSessionResponse, error) {
+	return s.issueProjectSessionWithClaims(r, projectID, u, projectauth.AAL1, nil)
+}
+
+// issueProjectSessionWithClaims additionally runs the before-token-issued
+// hook (claims merged under explicit custom, which wins on conflict) and
+// mints at the given assurance level (aal2 after MFA verification).
+func (s *Server) issueProjectSessionWithClaims(r *http.Request, projectID string, u *metadata.ProjectUser, aal string, custom map[string]any) (*projectSessionResponse, error) {
+	if aal == "" {
+		aal = projectauth.AAL1
+	}
+	hookRes, err := s.hooks().run(r.Context(), projectID, metadata.HookBeforeTokenIssued, map[string]any{
+		"user": map[string]any{"id": u.ID, "email": strOrEmpty(u.Email)},
+	})
+	if err != nil {
+		return nil, err
+	}
+	merged := map[string]any{}
+	for k, v := range hookCustomClaims(hookRes) {
+		merged[k] = v
+	}
+	for k, v := range custom {
+		merged[k] = v
+	}
+	var customOrNil map[string]any
+	if len(merged) > 0 {
+		customOrNil = merged
+	}
 	plaintext, hash, err := auth.NewRefreshToken()
 	if err != nil {
 		return nil, err
@@ -127,7 +154,7 @@ func (s *Server) issueProjectSession(r *http.Request, projectID string, u *metad
 		return nil, err
 	}
 	mgr := s.projectAuthManager(r)
-	access, _, err := mgr.IssueFor(r.Context(), projectID, u.ID, projectauth.RoleAuthenticated, projectauth.AAL1, 0)
+	access, _, err := mgr.IssueForCustom(r.Context(), projectID, u.ID, projectauth.RoleAuthenticated, aal, 0, customOrNil)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +165,13 @@ func (s *Server) issueProjectSession(r *http.Request, projectID string, u *metad
 		RefreshToken: plaintext,
 		User:         projectUserToView(u),
 	}, nil
+}
+
+func strOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // endUserFromBearer verifies a user JWT from the Authorization header and
@@ -203,10 +237,37 @@ func (s *Server) projectSignup(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	u := &metadata.ProjectUser{ProjectID: projectID, Email: &email, PasswordHash: hash, UserMetadata: req.Data}
+	// before-user-created may reject the signup or contribute metadata.
+	hookRes, err := s.hooks().run(r.Context(), projectID, metadata.HookBeforeUserCreated, map[string]any{
+		"user": map[string]any{"email": email, "data": req.Data},
+	})
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if msg := hookError(hookRes); msg != "" {
+		writeError(w, http.StatusUnprocessableEntity, "signup rejected: "+msg)
+		return
+	}
+	mergedData := map[string]any{}
+	for k, v := range req.Data {
+		mergedData[k] = v
+	}
+	for k, v := range hookUserMetadata(hookRes) {
+		mergedData[k] = v
+	}
+	u := &metadata.ProjectUser{ProjectID: projectID, Email: &email, PasswordHash: hash, UserMetadata: mergedData}
 	if err := s.svc.Store.CreateProjectUser(r.Context(), u); err != nil {
 		s.writeErr(w, err)
 		return
+	}
+	// after-user-created is notification-style: failures are logged, never
+	// surfaced (the user already exists — there is nothing to roll back to
+	// that wouldn't be worse).
+	if _, herr := s.hooks().run(r.Context(), projectID, metadata.HookAfterUserCreated, map[string]any{
+		"user": map[string]any{"id": u.ID, "email": email},
+	}); herr != nil {
+		s.svc.Log.Warn("auth hook after-user-created failed", "project", projectID, "err", herr)
 	}
 	ses, err := s.issueProjectSession(r, projectID, u)
 	if err != nil {
@@ -234,11 +295,13 @@ func (s *Server) projectToken(w http.ResponseWriter, r *http.Request) {
 		s.projectTokenRefresh(w, r, projectID)
 	case "pkce":
 		s.projectTokenPKCE(w, r, projectID)
+	case "id_token":
+		s.projectTokenIDToken(w, r, projectID)
 	default:
-		// Explicit 501 (not 404): the grant is planned (magiclink/otp/
-		// id_token arrive with later slices), the server simply doesn't speak
+		// Explicit 501 (not 404): the grant is planned (magiclink/otp
+		// arrive with later slices), the server simply doesn't speak
 		// it yet.
-		writeError(w, http.StatusNotImplemented, "grant_type "+grant+" is not yet supported (use password, refresh_token or pkce)")
+		writeError(w, http.StatusNotImplemented, "grant_type "+grant+" is not yet supported (use password, refresh_token, pkce or id_token)")
 	}
 }
 

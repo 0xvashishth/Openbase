@@ -161,6 +161,22 @@ OIDC connector (covers "custom providers") → phone/SMS OTP behind pluggable
   tests, real provider in staging) both yield a verifiable end-user JWT.
 
 ### Phase A3 — MFA, hooks, admin API, dashboard (maps to Phase 10.5–10.7)
+> **Shipped (backend):** `internal/mfa` (stdlib TOTP, RFC vectors), MFA endpoints
+> (`POST/GET /auth/v1/factors`, `POST .../{id}/challenge|verify`,
+> `DELETE .../{id}`; verify issues **aal2**), service_role admin API
+> (`GET/POST /auth/v1/admin/users`, `GET/PUT/DELETE .../{id}`,
+> `/admin/invite|generate_link|impersonate` — 5-min marked tokens, always
+> audited), `grant_type=id_token` (google/oidc), auth hooks (migration `0012`,
+> `before-user-created` reject/metadata, `after-user-created`,
+> `before-token-issued` custom claims, fail-open semantics, operator CRUD),
+> operator user endpoints (`GET/PUT/DELETE /v1/projects/{id}/users`),
+> migration `0013` (key-actor audit column + NULL hardening that also fixed
+> silent audit loss for empty UUID/IP writes). E2E-tested.
+> **Shipped (dashboard):** Authentication tool (Users search/ban/confirm/delete,
+> Providers github/google/oidc/sms config with callback URLs, Hooks
+> event→function wiring), API-keys role select + badges. 13 panel tests green;
+> typecheck + build clean. Note: `MembersPanel` invite test fails on HEAD
+> (pre-existing, from `850fd9e` — component/test disagree, untouched).
 
 - [ ] **A3.1 End-user MFA:** TOTP enrol/challenge/verify, recovery codes,
   `aal1/aal2` in claims, step-up for sensitive ops.

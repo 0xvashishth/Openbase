@@ -172,6 +172,15 @@ func (m *Manager) IssueFor(ctx context.Context, projectID, userID, role, aal str
 	return ks.Issue(userID, role, aal, ttl)
 }
 
+// IssueForCustom mints like IssueFor with hook-provided custom claims.
+func (m *Manager) IssueForCustom(ctx context.Context, projectID, userID, role, aal string, ttl time.Duration, custom map[string]any) (string, time.Time, error) {
+	ks, err := m.EnsureKeySet(ctx, projectID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return ks.IssueCustom(userID, role, aal, ttl, custom)
+}
+
 // VerifyFor verifies a token against a project's stored public keys. It needs
 // no secrets provider — verification is public-key only.
 func (m *Manager) VerifyFor(ctx context.Context, projectID, token string) (*Claims, error) {

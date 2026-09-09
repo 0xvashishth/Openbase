@@ -68,6 +68,7 @@ export const PROJECT_TOOL_META: ProjectToolMeta[] = [
   { slug: "schema", label: "Schema", description: "Visual tables and relationships.", section: "Database" },
   { slug: "sql", label: "SQL Editor", description: "Run reads and writes in your database's own language.", section: "Database" },
   { slug: "connect", label: "Connect", description: "Connect your app to Openbase — URLs, keys and code snippets.", section: "Backend" },
+  { slug: "auth", label: "Authentication", description: "End users, sign-in providers and auth hooks.", section: "Backend" },
   { slug: "api", label: "API Keys", description: "Keys for your auto-generated REST API.", section: "Backend", aliases: ["api-keys"] },
   { slug: "functions", label: "Functions", description: "Serverless functions triggered by data events.", section: "Backend" },
   { slug: "triggers", label: "Triggers", description: "When X happens on a table, run a function or webhook.", section: "Backend" },
