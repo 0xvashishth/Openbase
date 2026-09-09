@@ -551,6 +551,7 @@ invite a colleague as `admin`, see both sessions listed, revoke one, and read th
 of it.
 
 ## Phase 10 — End-user authentication per project (the GoTrue equivalent)
+> Detailed build plan with migration/model/API slices: see `SDK_PLAN.md` Track 1 (Phases A0–A3).
 **Goal:** the customer's *application users* become a first-class concept. This is the largest single
 gap and the hard prerequisite for Phase 11 (there is nothing to authorize against until it exists).
 
@@ -682,6 +683,8 @@ work rather than duplicating it.
 storage + functions), replacing `dashboard/lib/realtime.ts` — the dashboard becomes its first
 consumer, which is the only way the SDK stays honest. Then `openbase-py`. Publish a
 server-side-auth helper (cookie/session handling for Next.js and friends).
+> Detailed build plan (auth-backend-first ordering, package layout, per-method API surface,
+> acceptance criteria): see `SDK_PLAN.md` Tracks 1+2 (Phases A0–A3, S0–S5).
 
 **Done when:** `openbase.from('orders').select('*,customer(name)').eq('status','open').limit(20)`
 works from a browser against a Postgres project, returns only policy-permitted rows, and the same SDK

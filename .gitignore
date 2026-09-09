@@ -19,6 +19,10 @@ dashboard/.next/
 dashboard/out/
 dashboard/.env.local
 
+# JS SDK
+sdk/js/node_modules/
+sdk/js/dist/
+
 # Accidental root installs (all JS lives under dashboard/)
 node_modules/
 

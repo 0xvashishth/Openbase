@@ -33,6 +33,7 @@ Every feature (auth, triggers, realtime, API generation, visualization) talks to
 | `SCHEMA.md` | Platform's own metadata database schema (users, orgs, projects, connections) |
 | `LICENSING_NOTES.md` | Which databases are safe to bundle/redistribute, and why |
 | `PHASES.md` | Phase-by-phase build roadmap with concrete deliverables per phase |
+| `SDK_PLAN.md` | Detailed plan for the end-user auth system + `@openbase/js` npm SDK (expands `PHASES.md` Phase 10 + §12.7) |
 | `DEVELOPMENT.md` | How to run the API + dashboard locally, config, and tests |
 | `dashboard/` | Next.js + TypeScript + Tailwind web dashboard |
 
