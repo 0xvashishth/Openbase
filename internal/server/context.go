@@ -31,3 +31,14 @@ func keyRoleFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxKeyRole).(string)
 	return v
 }
+
+func contextWithEndUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxEndUserID, userID)
+}
+
+// endUserIDFromContext returns the end-user ID when the request was
+// authenticated with a user JWT rather than an API key. Empty otherwise.
+func endUserIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxEndUserID).(string)
+	return v
+}

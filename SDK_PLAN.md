@@ -118,6 +118,14 @@ POST /auth/v1/otp              # phone/email OTP request + verify
   > propagates the role in request context (`keyRoleFromContext`). Enforcement
   > against Phase 11 policies is still pending — until then anon === full access
   > and the data path behaves accordingly (tested in `apikey_roles_test.go`).
+> **Shipped (A1 core):** migration `0010` (`project_auth_codes`), full store layer
+> (`project_auth.go`: users/identities/sessions with rotation + reuse burn,
+> settings, MFA factors/challenges, signing keys, codes), `projectauth.Manager`
+> (bootstrap/issue/verify/JWKS/rotate against encrypted rows), public routes
+> `POST /auth/v1/signup|token|logout|recover|verify|otp`, `GET/PUT /auth/v1/user`,
+> public JWKS, and dual-auth middleware (API key **or** end-user JWT on the data
+> path). E2E-tested (`project_auth_test.go`). Remaining for A2/A3: OAuth/OIDC
+> authorize+callback, SMS delivery, MFA endpoints, admin API, auth hooks.
 - [ ] **A1.2 Rate limits + abuse:** per-project limits, redirect-URL allow-list,
   password strength policy, leaked-password check (offline list, optional),
   session idle + absolute timeouts.

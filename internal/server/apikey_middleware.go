@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/openbase/openbase/internal/apikey"
+	"github.com/openbase/openbase/internal/projectauth"
 )
 
 // requireAPIKey authenticates external requests via an API key. On success it
@@ -30,6 +31,14 @@ func (s *Server) requireAPIKey(next http.Handler) http.Handler {
 		}
 		if raw == "" {
 			writeError(w, http.StatusUnauthorized, "missing API key")
+			return
+		}
+		// End-user JWTs (Phase 10) authenticate the data plane and /auth/v1/*
+		// refresh-adjacent calls alongside API keys. Anything that is not an
+		// ob_ key takes the JWT path: the unverified pid claim routes the
+		// lookup, and verification (signature + project binding) decides.
+		if !strings.HasPrefix(raw, "ob_") {
+			s.serveWithEndUserJWT(w, r, raw, next)
 			return
 		}
 		normalized, err := apikey.Normalize(raw)
@@ -63,4 +72,22 @@ func (s *Server) requireAPIKey(next http.Handler) http.Handler {
 		ctx := contextWithKeyRole(contextWithProjectID(r.Context(), k.ProjectID), role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// serveWithEndUserJWT authenticates via a per-project user access token.
+// The pid claim is a routing hint only — VerifyFor checks the signature
+// against that project's keys and the project binding before trusting it.
+func (s *Server) serveWithEndUserJWT(w http.ResponseWriter, r *http.Request, raw string, next http.Handler) {
+	pid, err := projectauth.UnverifiedProjectID(raw)
+	if err != nil || pid == "" {
+		writeError(w, http.StatusUnauthorized, "invalid API key")
+		return
+	}
+	claims, err := s.projectAuthManager(r).VerifyFor(r.Context(), pid, raw)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid API key")
+		return
+	}
+	ctx := contextWithEndUserID(contextWithProjectID(r.Context(), claims.ProjectID), claims.UserID)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }

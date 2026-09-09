@@ -15,6 +15,7 @@ import (
 	"github.com/openbase/openbase/internal/auth"
 	"github.com/openbase/openbase/internal/metadata"
 	"github.com/openbase/openbase/internal/pool"
+	"github.com/openbase/openbase/internal/projectauth"
 	"github.com/openbase/openbase/internal/realtime"
 )
 
@@ -77,6 +78,11 @@ type Services struct {
 	// RealtimeHub is the Phase 5 WebSocket gateway. If nil, the realtime
 	// endpoint returns 503.
 	RealtimeHub *realtime.Hub
+
+	// ProjectAuth mints/verifies per-project end-user tokens (Phase 10).
+	// If nil, New wires one from Store + Secrets + PublicBaseURL; handlers
+	// use projectAuthManager which also lazily builds it per request.
+	ProjectAuth *projectauth.Manager
 
 	// Operability knobs (Phase 8.7). Zero values select safe defaults, so
 	// every existing Services literal keeps working unchanged.
@@ -207,6 +213,9 @@ func New(svc *Services) Handler {
 			svc.AuditSink = &NoopAuditSink{}
 		}
 	}
+	if svc.ProjectAuth == nil && svc.Store != nil {
+		svc.ProjectAuth = projectauth.NewManager(svc.Store, svc.Secrets, svc.PublicBaseURL)
+	}
 	s := &Server{mux: mux, svc: svc, pkCache: newRowKeyCache()}
 	s.adapters = s.newAdapterPool()
 
@@ -216,6 +225,21 @@ func New(svc *Services) Handler {
 	mux.Handle("POST /v1/auth/login", s.limitAuth(http.HandlerFunc(s.login)))
 	mux.Handle("POST /v1/auth/forgot", s.limitAuth(http.HandlerFunc(s.forgotPassword)))
 	mux.Handle("POST /v1/auth/reset", s.limitAuth(http.HandlerFunc(s.resetPassword)))
+
+	// End-user auth per project (Phase 10, A1). Project-scoped via the
+	// anon/service_role API key; rate-limited like operator auth.
+	mux.Handle("POST /auth/v1/signup", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectSignup))))
+	mux.Handle("POST /auth/v1/token", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectToken))))
+	mux.Handle("POST /auth/v1/logout", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectLogout))))
+	mux.Handle("GET /auth/v1/user", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectGetUser))))
+	mux.Handle("PUT /auth/v1/user", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectUpdateUser))))
+	mux.Handle("POST /auth/v1/recover", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectRecover))))
+	mux.Handle("POST /auth/v1/verify", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectVerify))))
+	mux.Handle("POST /auth/v1/otp", s.limitAuth(s.requireAPIKey(http.HandlerFunc(s.projectOTP))))
+
+	// Public JWKS so third parties can verify end-user tokens (no auth: the
+	// keys are public by design; unknown projects 404 via the FK on bootstrap).
+	mux.HandleFunc("GET /v1/projects/{projectID}/.well-known/jwks.json", s.projectJWKS)
 
 	// Operability probes (unauthenticated by design: load balancers and
 	// container healthchecks cannot present credentials).
@@ -324,6 +348,7 @@ const (
 	ctxUserID    ctxKey = "userID"
 	ctxProjectID ctxKey = "projectID"
 	ctxKeyRole   ctxKey = "keyRole"
+	ctxEndUserID ctxKey = "endUserID"
 )
 
 // ---- helpers ----

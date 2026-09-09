@@ -118,6 +118,22 @@ func ParsePublicJWK(j JWK) (*ecdsa.PublicKey, error) {
 	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}, nil
 }
 
+// UnverifiedProjectID extracts the pid claim without verifying the
+// signature. Callers must treat it as a routing hint only and pass the token
+// to (KeySet).Verify or (Manager).VerifyFor before trusting anything.
+func UnverifiedProjectID(tokenStr string) (string, error) {
+	parser := jwt.NewParser()
+	tok, _, err := parser.ParseUnverified(tokenStr, &Claims{})
+	if err != nil {
+		return "", err
+	}
+	claims, ok := tok.Claims.(*Claims)
+	if !ok {
+		return "", errors.New("projectauth: invalid claims")
+	}
+	return claims.ProjectID, nil
+}
+
 // KeySet is one project's signing keys: the active private key plus every
 // public key still honored for verification (rotation history).
 type KeySet struct {

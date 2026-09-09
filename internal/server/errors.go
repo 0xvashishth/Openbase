@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	errForbidden = errors.New("forbidden")
-	errNotFound  = errors.New("not found")
+	errForbidden   = errors.New("forbidden")
+	errNotFound    = errors.New("not found")
+	errUnauthorized = errors.New("unauthorized")
 )
 
 // writeErr maps package errors and sentinels to appropriate HTTP statuses and
@@ -21,6 +22,8 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errForbidden):
 		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, errUnauthorized):
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 	case errors.Is(err, errNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
 	default:

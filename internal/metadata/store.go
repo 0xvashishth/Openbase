@@ -310,6 +310,41 @@ type Store interface {
 	// Audit.
 	AppendAuditEvent(ctx context.Context, e *AuditEvent) error
 	ListAuditEvents(ctx context.Context, orgID string, limit int) ([]AuditEvent, error)
+
+	// End-user auth per project (Phase 10, ARCHITECTURE.md §2.8).
+	CreateProjectUser(ctx context.Context, u *ProjectUser) error
+	GetProjectUser(ctx context.Context, projectID, userID string) (*ProjectUser, error)
+	GetProjectUserByEmail(ctx context.Context, projectID, email string) (*ProjectUser, error)
+	GetProjectUserByPhone(ctx context.Context, projectID, phone string) (*ProjectUser, error)
+	ListProjectUsers(ctx context.Context, projectID, search string, limit, offset int) ([]ProjectUser, error)
+	UpdateProjectUser(ctx context.Context, u *ProjectUser) error
+	DeleteProjectUser(ctx context.Context, projectID, userID string) error
+	UpsertProjectIdentity(ctx context.Context, idn *ProjectIdentity) error
+	ListProjectIdentities(ctx context.Context, projectID, userID string) ([]ProjectIdentity, error)
+	CreateProjectSession(ctx context.Context, ses *ProjectSession) error
+	GetProjectSessionByHash(ctx context.Context, hash string) (*ProjectSession, error)
+	RevokeProjectSession(ctx context.Context, id string) error
+	RevokeProjectUserSessions(ctx context.Context, projectID, userID string) error
+	ListProjectSessions(ctx context.Context, projectID, userID string) ([]ProjectSession, error)
+	RotateProjectSession(ctx context.Context, oldHash string, next *ProjectSession) error
+	GetOrCreateProjectAuthSettings(ctx context.Context, projectID string) (*ProjectAuthSettings, error)
+	UpdateProjectAuthSettings(ctx context.Context, st *ProjectAuthSettings) error
+	CreateMFAFactor(ctx context.Context, f *ProjectMFAFactor) error
+	GetMFAFactor(ctx context.Context, projectID, factorID string) (*ProjectMFAFactor, error)
+	ListMFAFactors(ctx context.Context, projectID, userID string) ([]ProjectMFAFactor, error)
+	VerifyMFAFactor(ctx context.Context, projectID, factorID string) error
+	DeleteMFAFactor(ctx context.Context, projectID, factorID string) error
+	CreateMFAChallenge(ctx context.Context, c *ProjectMFAChallenge) error
+	GetMFAChallenge(ctx context.Context, challengeID string) (*ProjectMFAChallenge, error)
+	MarkMFAChallengeVerified(ctx context.Context, challengeID string) error
+	CreateProjectSigningKey(ctx context.Context, k *ProjectSigningKey) error
+	ListProjectSigningKeys(ctx context.Context, projectID string) ([]ProjectSigningKey, error)
+	DeleteProjectSigningKey(ctx context.Context, projectID, keyID string) error
+	MarkProjectSigningKeyRotated(ctx context.Context, projectID, keyID string) error
+	CreateProjectAuthCode(ctx context.Context, c *ProjectAuthCode) error
+	GetProjectAuthCodeByHash(ctx context.Context, hash string) (*ProjectAuthCode, error)
+	MarkProjectAuthCodeUsed(ctx context.Context, id string) error
+	RevokeProjectAuthCodesForUser(ctx context.Context, projectID, userID, kind string) error
 }
 
 // WebhookDelivery records one webhook trigger delivery attempt for the
