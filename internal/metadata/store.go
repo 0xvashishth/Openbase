@@ -111,15 +111,29 @@ type Connection struct {
 	CreatedAt             time.Time        `json:"created_at"`
 }
 
+// API key roles (Phase 10 A1.1). service_role bypasses future row policies
+// and must never ship to a browser; anon is the browser-safe key.
+const (
+	APIKeyRoleAnon       = "anon"
+	APIKeyRoleService    = "service_role"
+	APIKeyRoleDefault    = APIKeyRoleService
+)
+
 // APIKey is a per-project key for external app access. Only the hash is stored.
 type APIKey struct {
 	ID        string     `json:"id"`
 	ProjectID string     `json:"project_id"`
 	Name      string     `json:"name"`
 	KeyHash   string     `json:"-"`
+	Role      string     `json:"role"`
 	Scopes    []string   `json:"scopes"`
 	CreatedAt time.Time  `json:"created_at"`
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+}
+
+// ValidAPIKeyRole reports whether role is a known api_keys.role value.
+func ValidAPIKeyRole(role string) bool {
+	return role == APIKeyRoleAnon || role == APIKeyRoleService
 }
 
 // TriggerEvent mirrors SCHEMA.md triggers.event CHECK constraint.

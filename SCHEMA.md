@@ -96,6 +96,9 @@ CREATE TABLE api_keys (
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name            TEXT NOT NULL,
     key_hash        TEXT NOT NULL,
+    -- Phase 10 (A1.1): anon = browser-safe, service_role = bypass (never in a browser).
+    -- Pre-role keys default to service_role, preserving behavior.
+    role            TEXT NOT NULL DEFAULT 'service_role' CHECK (role IN ('anon', 'service_role')),
     scopes          TEXT[] NOT NULL DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at      TIMESTAMPTZ

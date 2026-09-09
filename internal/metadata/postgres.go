@@ -375,19 +375,22 @@ func (s *Postgres) CreateAPIKey(ctx context.Context, k *APIKey) error {
 	if k.Scopes == nil {
 		k.Scopes = []string{}
 	}
+	if k.Role == "" {
+		k.Role = APIKeyRoleDefault
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO api_keys (id, project_id, name, key_hash, scopes, created_at, revoked_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		k.ID, k.ProjectID, k.Name, k.KeyHash, k.Scopes, k.CreatedAt, k.RevokedAt)
+		INSERT INTO api_keys (id, project_id, name, key_hash, role, scopes, created_at, revoked_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		k.ID, k.ProjectID, k.Name, k.KeyHash, k.Role, k.Scopes, k.CreatedAt, k.RevokedAt)
 	return mapError(err)
 }
 
 func (s *Postgres) GetAPIKeyByHash(ctx context.Context, hash string) (*APIKey, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, project_id, name, key_hash, scopes, created_at, revoked_at
+		SELECT id, project_id, name, key_hash, role, scopes, created_at, revoked_at
 		FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL`, hash)
 	var k APIKey
-	err := row.Scan(&k.ID, &k.ProjectID, &k.Name, &k.KeyHash, &k.Scopes, &k.CreatedAt, &k.RevokedAt)
+	err := row.Scan(&k.ID, &k.ProjectID, &k.Name, &k.KeyHash, &k.Role, &k.Scopes, &k.CreatedAt, &k.RevokedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -399,7 +402,7 @@ func (s *Postgres) GetAPIKeyByHash(ctx context.Context, hash string) (*APIKey, e
 
 func (s *Postgres) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, project_id, name, key_hash, scopes, created_at, revoked_at
+		SELECT id, project_id, name, key_hash, role, scopes, created_at, revoked_at
 		FROM api_keys WHERE project_id = $1 ORDER BY created_at`, projectID)
 	if err != nil {
 		return nil, err
@@ -409,7 +412,7 @@ func (s *Postgres) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey,
 	var out []APIKey
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.ID, &k.ProjectID, &k.Name, &k.KeyHash, &k.Scopes, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.ProjectID, &k.Name, &k.KeyHash, &k.Role, &k.Scopes, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, k)

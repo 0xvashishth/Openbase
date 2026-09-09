@@ -109,10 +109,15 @@ POST /auth/v1/magiclink        # passwordless email link
 POST /auth/v1/otp              # phone/email OTP request + verify
 ```
 
-- [ ] **A1.1 Key roles:** split `ob_` keys into `anon` (safe for browsers, gated by
+- [x] **A1.1 Key roles:** split `ob_` keys into `anon` (safe for browsers, gated by
   policies) / `service_role` (bypass, never shipped to browser) per Phase 11.1.
   Data + auth routers accept `apikey:` anon key or end-user JWT; JWT claims become
   the authorization context.
+  > Shipped: migration `0009` (`api_keys.role`, pre-role keys → `service_role`),
+  > `POST /api-keys` accepts `role`, list/create responses surface it, middleware
+  > propagates the role in request context (`keyRoleFromContext`). Enforcement
+  > against Phase 11 policies is still pending — until then anon === full access
+  > and the data path behaves accordingly (tested in `apikey_roles_test.go`).
 - [ ] **A1.2 Rate limits + abuse:** per-project limits, redirect-URL allow-list,
   password strength policy, leaked-password check (offline list, optional),
   session idle + absolute timeouts.

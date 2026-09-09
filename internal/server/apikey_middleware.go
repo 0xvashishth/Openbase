@@ -53,7 +53,14 @@ func (s *Server) requireAPIKey(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := contextWithProjectID(r.Context(), k.ProjectID)
+		// Phase 10 (A1.1): propagate the key role so the data path (and Phase
+		// 11 policies) can distinguish anon from service_role. Pre-role keys
+		// read back as service_role via the migration default.
+		role := k.Role
+		if role == "" {
+			role = "service_role"
+		}
+		ctx := contextWithKeyRole(contextWithProjectID(r.Context(), k.ProjectID), role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

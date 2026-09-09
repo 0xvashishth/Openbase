@@ -323,6 +323,7 @@ type ctxKey string
 const (
 	ctxUserID    ctxKey = "userID"
 	ctxProjectID ctxKey = "projectID"
+	ctxKeyRole   ctxKey = "keyRole"
 )
 
 // ---- helpers ----

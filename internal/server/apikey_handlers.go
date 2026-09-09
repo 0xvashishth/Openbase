@@ -9,11 +9,15 @@ import (
 
 type createAPIKeyRequest struct {
 	Name string `json:"name"`
+	// Role is optional: "anon" or "service_role" (default). Pre-role
+	// behavior is preserved — omitting it mints a full-access service_role key.
+	Role string `json:"role,omitempty"`
 }
 
 type createAPIKeyResponse struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
+	Role      string   `json:"role"`
 	KeyHash   string   `json:"key_hash"`
 	Plaintext string   `json:"plaintext,omitempty"`
 	Scopes    []string `json:"scopes"`
@@ -36,6 +40,7 @@ func (s *Server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 	type apiKeyView struct {
 		ID        string     `json:"id"`
 		Name      string     `json:"name"`
+		Role      string     `json:"role"`
 		Scopes    []string   `json:"scopes"`
 		CreatedAt string     `json:"created_at"`
 		RevokedAt *string    `json:"revoked_at,omitempty"`
@@ -50,6 +55,7 @@ func (s *Server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 		out = append(out, apiKeyView{
 			ID:        k.ID,
 			Name:      k.Name,
+			Role:      k.Role,
 			Scopes:    k.Scopes,
 			CreatedAt: k.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			RevokedAt: revokedAt,
@@ -74,6 +80,14 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	role := req.Role
+	if role == "" {
+		role = metadata.APIKeyRoleDefault
+	}
+	if !metadata.ValidAPIKeyRole(role) {
+		writeError(w, http.StatusBadRequest, `role must be "anon" or "service_role"`)
+		return
+	}
 
 	plaintext, hash, err := apikey.New()
 	if err != nil {
@@ -84,6 +98,7 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	k := &metadata.APIKey{
 		ProjectID: projectID,
 		Name:      req.Name,
+		Role:      role,
 		KeyHash:   hash,
 		Scopes:    []string{"read", "write"},
 	}
@@ -95,6 +110,7 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		ID:        k.ID,
 		Name:      k.Name,
+		Role:      k.Role,
 		KeyHash:   k.KeyHash,
 		Plaintext: plaintext,
 		Scopes:    k.Scopes,
