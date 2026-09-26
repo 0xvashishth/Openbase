@@ -49,13 +49,17 @@ All config is env-driven (`internal/config`). The most important:
 | `OPENBASE_ADDR` | API listen address | `:8080` |
 | `OPENBASE_DATABASE_URL` | Platform metadata Postgres | `postgres://openbase:openbase@localhost:5432/openbase?sslmode=disable` |
 | `OPENBASE_JWT_SECRET` | JWT signing secret | dev default (reject in production) |
+| `OPENBASE_JWT_ISSUER` / `OPENBASE_JWT_AUDIENCE` | Operator token `iss` / `aud` claims | `openbase` / `openbase-dashboard` |
 | `OPENBASE_ENCRYPTION_KEY` | Envelope-encryption master key (current key) for connection secrets | empty ⇒ secrets disabled |
 | `OPENBASE_ENCRYPTION_KEY_ID` | Name/id of the current encryption key, stamped on new rows | `openbase-master-key-v1` |
 | `OPENBASE_ENCRYPTION_KEYS` | Key-rotation registry of historical keys, `id=secret,id=secret`, kept decodable | empty |
 | `OPENBASE_ALLOWED_ORIGINS` | CORS allow-list (comma-separated); empty = any origin | empty |
 | `OPENBASE_PUBLIC_URL` | Externally-reachable API origin advertised on the Connect tab; empty derives it from `Host`/`X-Forwarded-*` | empty |
 | `OPENBASE_PROVISIONER_ENABLED` | Enable "provisioned" DB mode (needs a Docker daemon) | `false` |
+| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | Allow webhook triggers to target loopback/private/LAN addresses; default is a public-http(s)-only SSRF deny-list | `false` |
+| `ENV` | Set to `production` to refuse the dev-default `OPENBASE_JWT_SECRET` | empty |
 | `NEXT_PUBLIC_OPENBASE_API_URL` | Dashboard → API base URL (browser) | `http://localhost:8080` |
+| `OPENBASE_API_INTERNAL_URL` | Dashboard → API base URL (server-side proxy / rewrites) | `http://localhost:8080` |
 
 ## Two connection directions
 
@@ -91,6 +95,11 @@ All dashboard-authenticated (JWT). The **min role** column is enforced by
 | `PATCH` | `/v1/orgs/{orgID}/members/{userID}` | admin | `{role}`; last-owner demote → 409; owner transitions owner-only |
 | `DELETE` | `/v1/orgs/{orgID}/members/{userID}` | member (self) / admin (others) | Self = leave; last owner → 409 |
 | `POST` | `/v1/orgs/{orgID}/transfer-ownership` | owner | `{user_id, demote_self?}` in one transaction |
+| `GET` | `/v1/orgs/{orgID}/invites` | admin | Pending invites issued by this org |
+| `POST` | `/v1/orgs/{orgID}/invites` | admin | `{email, role}`; mails an accept link via `internal/mail` (Phase 9.7) |
+| `DELETE` | `/v1/orgs/{orgID}/invites/{inviteID}` | admin | Revoke a pending invite |
+| `POST` | `/v1/invites/accept` | — | Public (token-authed): joins the caller to the org as the invited role |
+| `GET` | `/v1/orgs/{orgID}/audit` | admin | Audit trail for the org |
 | `POST` | `/v1/orgs/{orgID}/projects` | admin | |
 | `GET` | `/v1/orgs/{orgID}/projects` | member | |
 | `GET` | `/v1/projects/{projectID}` | member | Single-project resolver |
@@ -106,10 +115,11 @@ Two conventions worth knowing before adding endpoints here:
   "org still has projects" check are state conflicts: the caller *has* the
   permission. Reserve 403 for genuine permission failures.
 
-Adding a member requires an existing account. `internal/mail` does not exist yet
-(PHASES 9.2), so the API returns 404 for an unknown address rather than
-pretending an invite was sent. Migration `0003` already creates
-`organization_invites` for when the mailer lands.
+Adding a member directly requires an existing account, so `POST /v1/orgs/{orgID}/members`
+returns 404 for an address nobody has registered with. For an unknown email use the invite
+flow instead (`POST /v1/orgs/{orgID}/invites` → the invitee accepts at `GET /invite` with
+the mailed token → `POST /v1/invites/accept`), which is wired to the dashboard-managed
+BYOC SMTP mailer in `internal/mail` (Phase 9.2/9.7).
 
 ## Adapter pooling
 

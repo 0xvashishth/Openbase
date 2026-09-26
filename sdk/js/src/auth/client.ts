@@ -419,15 +419,24 @@ export class AuthClient {
     phone?: string
     data?: Record<string, unknown>
   }): Promise<{ data: { user: User | null }; error: import('../lib/fetch.js').Err['error'] | null }> {
-    const res = await this.transport.request<User>('/auth/v1/user', { method: 'PUT', body: attrs, fetch: this.fetchImpl })
+    const res = await this.transport.request<Record<string, unknown>>('/auth/v1/user', { method: 'PUT', body: attrs, fetch: this.fetchImpl })
     if (res.error) return { data: { user: null }, error: res.error }
+    // The server returns {user} plus, when it rotated the session (e.g.
+    // password change), a fresh {session} to adopt.
+    const body = (res.data ?? {}) as { user?: User; session?: Record<string, unknown> }
+    const user = body.user ?? (res.data as User)
+    const rotated = body.session ? sessionFromResponse(body.session) : null
+    if (rotated) {
+      await this.persist(rotated, 'USER_UPDATED')
+      return { data: { user: rotated.user ?? user ?? null }, error: null }
+    }
     if (this.currentSession) {
-      const next: Session = { ...this.currentSession, user: res.data }
+      const next: Session = { ...this.currentSession, user: user ?? this.currentSession.user }
       await this.persist(next, 'USER_UPDATED')
     } else {
       this.emit('USER_UPDATED', null)
     }
-    return { data: { user: res.data }, error: null }
+    return { data: { user: user ?? null }, error: null }
   }
 
   async resetPasswordForEmail(
@@ -539,13 +548,13 @@ export class AuthClient {
       email_confirm?: boolean
       user_metadata?: Record<string, unknown>
     }): Promise<{ data: { user: User | null }; error: import('../lib/fetch.js').Err['error'] | null }> => {
-      const res = await this.transport.request<User>('/auth/v1/admin/users', {
+      const res = await this.transport.request<{ user?: User } & User>('/auth/v1/admin/users', {
         method: 'POST',
         body: attrs,
         fetch: this.fetchImpl,
       })
       if (res.error) return { data: { user: null }, error: res.error }
-      return { data: { user: res.data }, error: null }
+      return { data: { user: res.data?.user ?? (res.data as User) ?? null }, error: null }
     },
     deleteUser: async (id: string): Promise<{ data: Record<string, never>; error: import('../lib/fetch.js').Err['error'] | null }> => {
       const res = await this.transport.request(`/auth/v1/admin/users/${id}`, { method: 'DELETE', fetch: this.fetchImpl })
@@ -556,13 +565,13 @@ export class AuthClient {
       email: string,
       options?: { redirectTo?: string; data?: Record<string, unknown> },
     ): Promise<{ data: { user: User | null }; error: import('../lib/fetch.js').Err['error'] | null }> => {
-      const res = await this.transport.request<User>('/auth/v1/admin/invite', {
+      const res = await this.transport.request<{ user?: User } & User>('/auth/v1/admin/invite', {
         method: 'POST',
         body: { email, redirect_to: options?.redirectTo, data: options?.data ?? {} },
         fetch: this.fetchImpl,
       })
       if (res.error) return { data: { user: null }, error: res.error }
-      return { data: { user: res.data }, error: null }
+      return { data: { user: res.data?.user ?? (res.data as User) ?? null }, error: null }
     },
     generateLink: async (args: {
       type: 'signup' | 'magiclink' | 'recovery' | 'invite' | 'email_change_current' | 'email_change_new'
@@ -581,13 +590,13 @@ export class AuthClient {
       id: string,
       attrs: { email?: string; password?: string; ban_duration?: string; user_metadata?: Record<string, unknown> },
     ): Promise<{ data: { user: User | null }; error: import('../lib/fetch.js').Err['error'] | null }> => {
-      const res = await this.transport.request<User>(`/auth/v1/admin/users/${id}`, {
+      const res = await this.transport.request<{ user?: User } & User>(`/auth/v1/admin/users/${id}`, {
         method: 'PUT',
         body: attrs,
         fetch: this.fetchImpl,
       })
       if (res.error) return { data: { user: null }, error: res.error }
-      return { data: { user: res.data }, error: null }
+      return { data: { user: res.data?.user ?? (res.data as User) ?? null }, error: null }
     },
   }
 

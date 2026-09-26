@@ -504,13 +504,16 @@ func (s *Server) projectUpdateUser(w http.ResponseWriter, r *http.Request) {
 		s.sendProjectCode(r, projectID, u, metadata.AuthCodeEmailChange, mail.TemplateVerifyEmail, "1 hour")
 	}
 	// The password rotation above revoked this caller's session; mint a fresh
-	// pair so update-password doesn't log the user out.
+	// pair so update-password doesn't log the user out. The response carries
+	// both the GoTrue-compatible user object and the fresh session (clients
+	// that only understand {user} keep working; session-aware clients adopt
+	// the new pair).
 	ses, err := s.issueProjectSession(r, projectID, u)
 	if err != nil {
 		s.writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ses)
+	writeJSON(w, http.StatusOK, map[string]any{"user": projectUserToView(u), "session": ses})
 }
 
 // sendProjectCode stores a single-use code and delivers it via the mailer.

@@ -25,11 +25,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:live": "OPENBASE_E2E=1 vitest run test/live.test.ts",
     "size": "npm run build && gzip-size dist/index.js"
   },
   "peerDependencies": {},
   "dependencies": {},
   "devDependencies": {
+    "@types/node": "^22.10.7",
     "typescript": "^5.7.3",
     "vitest": "^4.0.0",
     "tsup": "^8.3.5"

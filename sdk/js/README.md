@@ -13,7 +13,7 @@ import { createClient } from '@openbase/js'
 
 const openbase = createClient(process.env.OPENBASE_URL!, process.env.OPENBASE_ANON_KEY!)
 
-// Auth (requires the Phase 10 `/auth/v1/*` backend; see SDK_PLAN.md Track 1)
+// Auth (GoTrue-equivalent backend: /auth/v1/*, see PHASES.md Phase 10)
 await openbase.auth.signUp({ email, password })
 await openbase.auth.signInWithPassword({ email, password })
 openbase.auth.onAuthStateChange((event, session) => console.log(event, session?.user.id))
@@ -58,6 +58,7 @@ npm install
 npm test          # vitest
 npm run typecheck # tsc --noEmit
 npm run build     # tsup (ESM+CJS+d.ts, incl. ./server entry)
+npm run test:live # live E2E against a running stack (OPENBASE_E2E=1)
 ```
 
-See `SDK_PLAN.md` (repo root) for the phase plan and backend dependencies.
+Phase plan and backend dependencies: [`PHASES.md`](../../PHASES.md) §12.7.

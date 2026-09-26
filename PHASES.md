@@ -145,7 +145,9 @@ runs against both engines unchanged. Full Go suite + dashboard build green.
 
 - [x] `SubscribeToChanges` implemented for Postgres (native LISTEN/NOTIFY) — delivered; FerretDB (polling, clearly labeled as near-realtime not instant) explicitly deferred to a follow-up (honest-capability rule)
 - [x] WebSocket gateway for client subscriptions (`GET /v1/realtime`, API-key authed)
-- [ ] Minimal client SDK (JS/TS) + live-updating list demo in the dashboard
+- [x] Minimal client SDK (JS/TS) + live-updating list demo in the dashboard — delivered: the
+      dashboard Realtime tab subscribes over WebSocket and shows a live-updating list, and
+      `@openbase/js` (`sdk/js/`, Phase 12.7) is the client library
 
 **Done when:** a browser demo shows a list updating live when a row changes, for at least the Postgres adapter. — *Met: the dashboard "Realtime" tab subscribes over WebSocket and a live-updating list reflects REST inserts for Postgres; `RegisterRealtimeBroadcast` returns `ErrUnsupported` for non-native engines. Browser auth fixed via `?apiKey=` query fallback in `requireAPIKey` (browsers cannot set WS headers); the SDK sends the key and the demo gates its "live" indicator on socket state (`TestRealtimeQueryParamAuth`).*
 
@@ -551,11 +553,13 @@ invite a colleague as `admin`, see both sessions listed, revoke one, and read th
 of it.
 
 ## Phase 10 — End-user authentication per project (the GoTrue equivalent)
-> Detailed build plan with migration/model/API slices: see `SDK_PLAN.md` Track 1 (Phases A0–A3).
 **Goal:** the customer's *application users* become a first-class concept. This is the largest single
 gap and the hard prerequisite for Phase 11 (there is nothing to authorize against until it exists).
 
 **10.0 — Decide where end users live (do this first, write it into `ARCHITECTURE.md`).**
+> **Settled and shipped** — the decision is recorded in `ARCHITECTURE.md` §2.8: end users live in the
+> platform metadata DB keyed by `project_id` (option b), each project minting its own ES256 keys,
+> with a native `openbase_auth` mode (option a) deferred behind a `SupportsNativeAuth` capability.
 Two options:
 - **(a) In the project's own database** (`openbase_auth` schema). Matches Supabase, lets native RLS
   join against `auth.users`, and survives Openbase being uninstalled. Only possible for engines with
@@ -683,8 +687,21 @@ work rather than duplicating it.
 storage + functions), replacing `dashboard/lib/realtime.ts` — the dashboard becomes its first
 consumer, which is the only way the SDK stays honest. Then `openbase-py`. Publish a
 server-side-auth helper (cookie/session handling for Next.js and friends).
-> Detailed build plan (auth-backend-first ordering, package layout, per-method API surface,
-> acceptance criteria): see `SDK_PLAN.md` Tracks 1+2 (Phases A0–A3, S0–S5).
+
+*Status:* `sdk/js/` ships the core package (`@openbase/js` v0.1.0 — `createClient`, auth, PostgREST-
+style query builder, realtime channels, storage/functions surfaces, a `@openbase/js/server` SSR entry
+and typed `CapabilityError`s) with 52 unit tests. The auth backend it calls (Phase 10) has landed, so
+`auth.*` is no longer mock-only. What is left:
+- [ ] Live SDK ↔ backend E2E against a running stack (`sdk/js/test/live.test.ts`, gated on
+      `OPENBASE_E2E=1`) across signup → session → data read → realtime subscribe.
+- [ ] Dashboard dogfooding: the realtime demo consumes the SDK instead of
+      `dashboard/lib/realtime.ts`, and `permissions.test.ts`-style parity checks run against it.
+- [ ] API freeze, semver policy, changelog, and a migration guide from 0.x before `1.0` on npm.
+- [ ] Type generation (`npx openbase gen types --project <id>`) — needs Phase 13.1 DDL introspection.
+- [ ] Typedoc + guides (getting started, auth flows incl. OAuth redirect wiring and PKCE).
+- [ ] Publish to npm under `@openbase/js` (or drop the scope if npm org access is unavailable) and
+      add a CI job that publishes on tag.
+- [ ] `openbase-py` (Python port of the same surface).
 
 **Done when:** `openbase.from('orders').select('*,customer(name)').eq('status','open').limit(20)`
 works from a browser against a Postgres project, returns only policy-permitted rows, and the same SDK
